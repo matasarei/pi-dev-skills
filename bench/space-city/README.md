@@ -40,6 +40,8 @@ Re-score a finished run with `BENCH_RESULTS=/dev/null bash bench/space-city/scor
 (without it, the row is appended to `results.md` again).
 
 The run is headless: a skill that stops to ask ends its session, and the step counts as not done.
+A start the harness gates itself (a refused branch: `step-start.sh`'s `STOP`) never reaches the
+model; `meta.env` records that step's exit as 3.
 That holds for both harnesses alike.
 
 ## What a row says
