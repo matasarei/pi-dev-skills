@@ -50,12 +50,15 @@ export function run(command, { cwd, env, timeoutMs = TIMEOUT_MS }) {
       cwd,
       env: { ...process.env, ...env },
       stdio: ["ignore", "pipe", "pipe"],
+      // Its own process group, so a timeout kills what it started in the
+      // background too; one left alive holds the pipe and close never fires.
+      detached: true,
     })
     let out = ""
     child.stdout.on("data", (d) => { out += d })
     child.stderr.on("data", (d) => { out += d })
     const timer = setTimeout(() => {
-      child.kill("SIGKILL")
+      try { process.kill(-child.pid, "SIGKILL") } catch { child.kill("SIGKILL") }
       out += `\n(timed out after ${Math.round(timeoutMs / 1000)}s)`
     }, timeoutMs)
     child.on("error", (e) => { out += `\n(could not run bash: ${e.message})` })
