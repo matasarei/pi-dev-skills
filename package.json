@@ -10,6 +10,6 @@
     "node": ">=22.19"
   },
   "pi": {
-    "extensions": ["./pi/commands.js"]
+    "extensions": ["./pi/commands.js", "./pi/guard.js"]
   }
 }

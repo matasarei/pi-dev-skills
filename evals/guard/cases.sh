@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Behaviour cases for lib/dev-guard.js — run them from anywhere:
+# Behaviour cases for pi/guard.js — run them from anywhere:
 #
 #   bash evals/guard/cases.sh
 #
 # Every case is "expected | the command the hook is asked about": 2 refused,
-# 0 allowed. The plugin is loaded the way OpenCode loads it — the named export
-# called with a directory, the tool.execute.before hook called with the tool
-# and its arguments — and a throw is a refusal. The table runs once with no
+# 0 allowed. The extension is loaded the way Pi loads it — the default export
+# called with a pi whose on() records the tool_call handler, the handler called
+# with { toolName, input } and a context carrying cwd — and { block: true } is a
+# refusal. A throw is never one: Pi reports it as an extension error and runs
+# the tool anyway, so a throw fails the case. The table runs once with no
 # profile (main and master are the base branches) and once with a profile
 # naming another base branch. Needs node; says so and fails without it.
 #
@@ -18,9 +20,9 @@
 set -u
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
-plugin="$root/lib/dev-guard.js"
-[ -f "$plugin" ] || { printf 'no dev-guard.js at %s\n' "$plugin" >&2; exit 1; }
-command -v node >/dev/null 2>&1 || { printf 'guard: node is required to run the plugin — not installed\n' >&2; exit 1; }
+plugin="$root/pi/guard.js"
+[ -f "$plugin" ] || { printf 'no pi/guard.js at %s\n' "$plugin" >&2; exit 1; }
+command -v node >/dev/null 2>&1 || { printf 'guard: node is required to run the extension — not installed\n' >&2; exit 1; }
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT INT TERM
@@ -91,94 +93,98 @@ mkdir -p "$work/withprofile/.devskills"
 printf '{ "baseBranch": "release" }\n' > "$work/withprofile/.devskills/profile.json"
 
 cat > "$work/run.mjs" <<'JS'
-import { readFileSync } from "node:fs"
+import { readFileSync, writeFileSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 const [pluginPath, casesPath, dir, label] = process.argv.slice(2)
 const mod = await import(pathToFileURL(pluginPath).href)
 let fails = 0
-// OpenCode plugin loader invokes every exported entity as a plugin factory.
-// Exporting non-plugin helper functions causes OpenCode to crash on startup.
-const extraneousExports = Object.keys(mod).filter(k => k !== "DevGuard" && k !== "default")
-if (extraneousExports.length > 0) {
-  fails++
-  console.log(`FAIL  ${label} plugin exports non-plugin entities: ${extraneousExports.join(", ")}`)
+const fail = (what) => { fails++; console.log(`FAIL  ${label} ${what}`) }
+// A fresh extension instance: its own loop history, its own tool_call handler.
+const load = () => {
+  const handlers = {}
+  mod.default({ on: (name, fn) => { handlers[name] = fn } })
+  if (typeof handlers.tool_call !== "function") throw new Error("the extension registered no tool_call handler")
+  return (toolName, input, cwd = dir) => handlers.tool_call({ type: "tool_call", toolCallId: "t", toolName, input }, { cwd })
 }
-const hooks = await mod.DevGuard({ directory: dir })
-const hook = hooks["tool.execute.before"]
+let call = load()
+// The verdict on one call: "2" refused, "0" allowed, "threw" for a throw.
+const verdict = async (toolName, input) => {
+  try {
+    const r = await call(toolName, input)
+    if (r === undefined) return ["0", ""]
+    if (r?.block === true && typeof r.reason === "string" && r.reason.startsWith("dev-guard refuses:")) return ["2", r.reason]
+    return [`bad result ${JSON.stringify(r)}`, ""]
+  } catch (e) { return ["threw", e.message] }
+}
 for (const line of readFileSync(casesPath, "utf8").split("\n")) {
   if (!line || line.startsWith("#")) continue
   const i = line.indexOf("|")
   const want = line.slice(0, i), cmd = line.slice(i + 1)
-  let got = "0", reason = ""
-  try { await hook({ tool: "bash", sessionID: "s" }, { args: { command: cmd } }) }
-  catch (e) { got = "2"; reason = e.message }
-  if (got !== want) { fails++; console.log(`FAIL  ${label} want=${want} got=${got}  ${cmd}${reason ? "  (" + reason + ")" : ""}`) }
+  const [got, reason] = await verdict("bash", { command: cmd })
+  if (got !== want) fail(`want=${want} got=${got}  ${cmd}${reason ? "  (" + reason + ")" : ""}`)
 }
 // Another tool's arguments are never read: an edit whose text mentions a push is not a push.
-try { await hook({ tool: "edit" }, { args: { command: "git push --force" } }) }
-catch { fails++; console.log(`FAIL  ${label} a non-bash tool was refused`) }
-// Grep patterns with unescaped backslashes (e.g. namespaces, paths) are sanitized
+if ((await verdict("edit", { command: "git push --force" }))[0] !== "0") fail("a non-bash tool was refused")
+// Grep patterns with unescaped backslashes (e.g. namespaces, paths) are sanitized...
 const grepArgs = { pattern: "Vendor\\Modules\\Resource" }
-await hook({ tool: "grep" }, { args: grepArgs })
-if (grepArgs.pattern !== "Vendor\\\\Modules\\\\Resource") {
-  fails++
-  console.log(`FAIL  ${label} grep pattern was not sanitized: ${grepArgs.pattern}`)
+await call("grep", grepArgs)
+if (grepArgs.pattern !== "Vendor\\\\Modules\\\\Resource") fail(`grep pattern was not sanitized: ${grepArgs.pattern}`)
+// ...unless the search is literal, where a backslash is text, not an escape
+const literalArgs = { pattern: "Vendor\\Modules", literal: true }
+await call("grep", literalArgs)
+if (literalArgs.pattern !== "Vendor\\Modules") fail(`a literal grep pattern was changed: ${literalArgs.pattern}`)
+// find's directory: a file path becomes its parent, absolute or relative
+const sample = `${dir}/sample.txt`
+writeFileSync(sample, "hello\n")
+const findArgs = { path: sample, pattern: "*.txt" }
+await call("find", findArgs)
+if (findArgs.path !== dir) fail(`find file path was not sanitized to dirname: ${findArgs.path}`)
+const findRel = { path: "sample.txt", pattern: "*.txt" }
+await call("find", findRel)
+if (findRel.path !== ".") fail(`a relative find file path was not sanitized to '.': ${findRel.path}`)
+// Bash timeout: Pi counts seconds. Milliseconds are divided down, anything under 30 s is raised to 30, invalid removed.
+for (const [given, want] of [[5, 30], [45, 45], [120000, 120], [1000, 30]]) {
+  const args = { command: `ls # ${given}`, timeout: given }
+  await call("bash", args)
+  if (args.timeout !== want) fail(`bash timeout: ${given} was not sanitized to ${want}: ${args.timeout}`)
 }
-// Glob path sanitization (file path converted to parent directory)
-const globDummyFile = `${dir}/sample.txt`
-const { writeFileSync } = await import("node:fs")
-writeFileSync(globDummyFile, "hello\n")
-const globArgs = { path: globDummyFile, pattern: "*.txt" }
-await hook({ tool: "glob" }, { args: globArgs })
-if (globArgs.path !== dir) {
-  fails++
-  console.log(`FAIL  ${label} glob file path was not sanitized to dirname: ${globArgs.path}`)
-}
-// Bash timeout sanitization (seconds converted to ms, clamped to >= 30000, invalid removed)
-const bashArgs5 = { command: "ls", timeout: 5 }
-await hook({ tool: "bash" }, { args: bashArgs5 })
-if (bashArgs5.timeout !== 30000) {
-  fails++
-  console.log(`FAIL  ${label} bash timeout: 5 was not sanitized to 30000: ${bashArgs5.timeout}`)
-}
-const bashArgs60 = { command: "ls", timeout: 60 }
-await hook({ tool: "bash" }, { args: bashArgs60 })
-if (bashArgs60.timeout !== 60000) {
-  fails++
-  console.log(`FAIL  ${label} bash timeout: 60 was not sanitized to 60000: ${bashArgs60.timeout}`)
-}
-const bashArgsInvalid = { command: "ls", timeout: -1 }
-await hook({ tool: "bash" }, { args: bashArgsInvalid })
-if ("timeout" in bashArgsInvalid) {
-  fails++
-  console.log(`FAIL  ${label} invalid bash timeout was not deleted`)
+for (const given of [-1, 0, "60"]) {
+  const args = { command: `ls # ${given}`, timeout: given }
+  await call("bash", args)
+  if ("timeout" in args) fail(`invalid bash timeout ${JSON.stringify(given)} was not deleted`)
 }
 // Repeated identical edit call on an already-updated file is refused on retry
-const dummyFile = `${dir}/dummy.txt`
-writeFileSync(dummyFile, "const AUTH_CONFIG = { enabled: true };\n")
-const editArgs = { filePath: dummyFile, oldString: "const AUTH_CONFIG = { enabled: false };", newString: "const AUTH_CONFIG = { enabled: true };" }
-await hook({ tool: "edit" }, { args: editArgs })
-let editRefused = false
-try { await hook({ tool: "edit" }, { args: editArgs }) }
-catch (e) { if (e.message.includes("is already present")) editRefused = true }
-if (!editRefused) { fails++; console.log(`FAIL  ${label} repeated edit on already-updated file was not refused`) }
-// Line ending preservation (CRLF in file normalizes LF in edit arguments)
-const crlfFile = `${dir}/crlf.txt`
-writeFileSync(crlfFile, "first line\r\nsecond line\r\n")
-const crlfEditArgs = { filePath: crlfFile, oldString: "second line\n", newString: "second line updated\n" }
-await hook({ tool: "edit" }, { args: crlfEditArgs })
-if (!crlfEditArgs.oldString.includes("\r\n") || !crlfEditArgs.newString.includes("\r\n")) {
-  fails++
-  console.log(`FAIL  ${label} edit arguments did not preserve CRLF line endings`)
-}
-// Reading a directory as a file is refused, pointing at glob or ls instead
-let readRefused = false
-try { await hook({ tool: "read" }, { args: { filePath: dir } }) }
-catch (e) { if (e.message.includes("is a directory, not a file")) readRefused = true }
-if (!readRefused) { fails++; console.log(`FAIL  ${label} reading a directory was not refused`) }
+const dummy = `${dir}/dummy.txt`
+writeFileSync(dummy, "const AUTH_CONFIG = { enabled: true };\n")
+const editArgs = () => ({ path: dummy, edits: [{ oldText: "const AUTH_CONFIG = { enabled: false };", newText: "const AUTH_CONFIG = { enabled: true };" }] })
+call = load()
+if ((await verdict("edit", editArgs()))[0] !== "0") fail("a first edit call was refused")
+const [again, why] = await verdict("edit", editArgs())
+if (again !== "2" || !why.includes("is already present")) fail(`repeated edit on already-updated file was not refused: ${again} ${why}`)
+// ...and one whose oldText is not in the file is refused with that reason
+writeFileSync(dummy, "something else\n")
+call = load()
+await call("edit", editArgs())
+const [missing, whyMissing] = await verdict("edit", editArgs())
+if (missing !== "2" || !whyMissing.includes("oldText was not found")) fail(`repeated edit with absent oldText was not refused: ${missing} ${whyMissing}`)
+// Line ending preservation (CRLF in file normalizes LF in edit arguments, and in a write)
+const crlf = `${dir}/crlf.txt`
+writeFileSync(crlf, "first line\r\nsecond line\r\n")
+const crlfEdit = { path: crlf, edits: [{ oldText: "second line\n", newText: "second line updated\n" }] }
+await call("edit", crlfEdit)
+if (!crlfEdit.edits[0].oldText.includes("\r\n") || !crlfEdit.edits[0].newText.includes("\r\n")) fail("edit arguments did not preserve CRLF line endings")
+const crlfWrite = { path: crlf, content: "first line\nsecond line\n" }
+await call("write", crlfWrite)
+if (crlfWrite.content !== "first line\r\nsecond line\r\n") fail(`write content did not take the file's CRLF: ${JSON.stringify(crlfWrite.content)}`)
+// Reading a directory as a file is refused, pointing at find or ls instead
+const [readDir, whyDir] = await verdict("read", { path: dir })
+if (readDir !== "2" || !whyDir.includes("is a directory, not a file")) fail("reading a directory was not refused")
 // ...and reading a file is not: a refusal that caught every path would stop the model reading anything
-try { await hook({ tool: "read" }, { args: { filePath: globDummyFile } }) }
-catch (e) { fails++; console.log(`FAIL  ${label} reading a file was refused: ${e.message}`) }
+if ((await verdict("read", { path: sample }))[0] !== "0") fail("reading a file was refused")
+// The same call three times in a row is a loop, and the third is refused
+call = load()
+const loop = await Promise.all([0, 1, 2].map(() => verdict("read", { path: sample })))
+if (loop.map((v) => v[0]).join(",") !== "0,0,2") fail(`three identical reads were not refused on the third: ${loop.map((v) => v[0]).join(",")}`)
 process.exit(fails ? 1 : 0)
 JS
 
