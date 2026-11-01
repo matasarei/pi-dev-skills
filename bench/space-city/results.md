@@ -7,3 +7,4 @@ One row per run of `run.sh`, appended by `score.sh`. See the README for what eac
 | 2026-11-01 | pi@e2e3e3a | 1-3 | 1 | 14/14 | 7/7 | 5/5 | 18 | 1 errors | package-lock.json¹ | 1 / 2 | 5 | 14 | 3017 | 2861856/61233 |
 
 ¹ Run `20261101-230245-pi`, the first baseline. Session 2 deleted `node_modules` and `package-lock.json` and reinstalled on the host, which broke the container the tests run in. The row was re-scored on a copy with the lock file restored and the dependencies reinstalled in the container. The lock-file change is the model's, so it is listed as outside the plan. The 18 other failing tests are the model's own, flaky because they place zones where the random LandingBase can be.
+| 2026-11-02 | pi@e049e36 | 1-3 | 1 | 14/14 | 6/7 | 3/5 | 6 | 2 errors | none | 1 / 2 | 95 | 31 | 1887 | 5310929/42001 |
