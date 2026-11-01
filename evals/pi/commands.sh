@@ -140,10 +140,16 @@ const r1 = await expect("2", "read", { path: "README.md" }, "a read once the ste
 if (!/step 1 is done/.test(r1.reason ?? "")) fails.push(`the done refusal does not say the step is done: ${r1.reason}`)
 if (r1.terminate) fails.push("the first refusal after done already terminates")
 await expect("0", "bash", { command: `echo "2026-11-02 x" >> .devskills/learned.md && tail -20 .devskills/learned.md` }, "the learned.md line after done")
+await expect("0", "bash", { command: `printf '%s\\n' "a; b" >> .devskills/learned.md && tail -20 .devskills/learned.md > .devskills/learned.tmp && mv .devskills/learned.tmp .devskills/learned.md` }, "the skill's append-then-trim after done")
+// A command that only mentions learned.md is not the learned line.
+const rc = await expect("2", "bash", { command: `echo x >> .devskills/learned.md; npm test` }, "a chained command riding on the learned line")
+const rp = await expect("2", "bash", { command: `cat .devskills/learned.md | bash` }, "a learned.md read piped into a shell")
+if (rc.terminate) fails.push("the second refusal after done already terminates")
+if (!rp.terminate) fails.push("the third refusal after done does not terminate")
 const r2 = await expect("2", "bash", { command: `bash ${lib}/branch.sh .tasks/plan.md 2` }, "starting step 2 after done")
-if (r2.terminate) fails.push("the second refusal after done already terminates")
+if (!r2.terminate) fails.push("the fourth refusal after done does not terminate")
 const r3 = await expect("2", "write", { path: "src/x.ts", content: "x" }, "a write after done")
-if (!r3.terminate) fails.push("the third refusal after done does not terminate")
+if (!r3.terminate) fails.push("the fifth refusal after done does not terminate")
 
 // Any other /dev-* command, or a new session, clears the gate.
 await commands["dev-init"].handler("", ctx)

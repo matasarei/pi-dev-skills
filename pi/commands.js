@@ -98,10 +98,31 @@ export function stepDone(state, cwd) {
   return git(cwd, "status", "--porcelain") === ""
 }
 
-// The only call a finished step still makes: the report's one learned.md line.
-const learnedOnly = (toolName, input) =>
-  (toolName === "bash" && /\.devskills\/learned\.md/.test(input?.command ?? "") && !/\b(branch|tick|task-step|step-budget)\.sh\b/.test(input.command)) ||
-  ((toolName === "write" || toolName === "edit") && /(^|\/)\.devskills\/learned\.md$/.test(input?.path ?? ""))
+// A command line's simple commands, as written. Split where the line splits
+// outside quotes, so a ";" inside a quoted note does not split it.
+function simpleCommands(command) {
+  const blank = command.replace(/'[^']*'|"[^"]*"/g, (q) => " ".repeat(q.length))
+  const parts = []
+  let from = 0
+  for (const m of blank.matchAll(/\|\||&&|[;|\n]/g)) {
+    parts.push(command.slice(from, m.index))
+    from = m.index + m[0].length
+  }
+  parts.push(command.slice(from))
+  return parts.map((p) => p.trim()).filter(Boolean)
+}
+
+// The only call a finished step still makes: the report's one learned.md line —
+// a command line in which every simple command is a text tool working on
+// .devskills/learned…, nothing else riding along.
+const LEARNED = /(^|[\s"'=/])\.devskills\/learned[.\w-]*/
+const TEXT_TOOL = /^(echo|printf|tail|head|mv|cp|mkdir)(\s|$)/
+const learnedOnly = (toolName, input) => {
+  if (toolName === "write" || toolName === "edit") return /(^|\/)\.devskills\/learned\.md$/.test(input?.path ?? "")
+  if (toolName !== "bash" || typeof input?.command !== "string") return false
+  const parts = simpleCommands(input.command)
+  return parts.length > 0 && parts.every((p) => TEXT_TOOL.test(p) && LEARNED.test(p))
+}
 
 export function gate(state, event, cwd) {
   if (!state) return undefined
