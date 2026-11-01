@@ -148,6 +148,41 @@ const INSTALLS = /^(npm|pnpm|yarn|composer|pip3?|poetry)\s+(ci|i|install|add|req
 // What `install` puts back. Deleting one breaks every run after it.
 const DEPENDENCIES = /^(node_modules|vendor|package-lock\.json|yarn\.lock|pnpm-lock\.yaml|composer\.lock|poetry\.lock|Cargo\.lock)$/
 
+// A command's words without the ones that only wrap it: VAR=value assignments,
+// and sudo, env, time, nohup, command and exec with their own flags.
+const WRAPPERS = /^(sudo|env|time|nohup|command|exec)$/
+function unwrap(words) {
+  let i = 0
+  while (i < words.length) {
+    if (/^\w+=/.test(words[i])) { i++; continue }
+    if (!WRAPPERS.test(words[i])) break
+    i++
+    while (words[i]?.startsWith("-")) i++
+  }
+  return words.slice(i)
+}
+
+const unquote = (word) => word.replace(/^(['"])(.*)\1$/, "$2")
+// Whether a path names something install provides: by its last component,
+// quoted or not, relative or absolute.
+const isDependency = (word) => DEPENDENCIES.test(unquote(word).replace(/\/+$/, "").split("/").pop())
+
+// Whether a command deletes what install provides — rm of it, or find naming it
+// with -delete or -exec rm. Read from the command as written: quotes are what a
+// model reaches for once the bare form is refused, so they are not blanked here.
+function deletesDependency(command) {
+  for (const seg of command.split(/\|\||&&|[;|\n]/)) {
+    const words = unwrap(seg.trim().split(/\s+/).filter(Boolean))
+    if (words[0] === "rm" && words.slice(1).some((w) => !w.startsWith("-") && isDependency(w))) return true
+    if (words[0] === "find") {
+      const deletes = words.includes("-delete") || words.some((w, k) => w === "-exec" && /^(\/bin\/)?rm$/.test(words[k + 1] ?? ""))
+      const names = words.some((w, k) => /^-(i?name|path)$/.test(w) && isDependency(words[k + 1] ?? ""))
+      if (deletes && names) return true
+    }
+  }
+  return false
+}
+
 // One command line as its simple commands: split on ; && || | and newlines,
 // leading `cd …` and VAR=value words dropped. Quoted text is blanked first, so
 // talk about a command is not the command.
@@ -161,13 +196,10 @@ function segments(command) {
 export function reasonToRefuseRun(command, profile) {
   if (typeof command !== "string") return null
   const install = typeof profile?.install === "string" && profile.install ? profile.install : null
-  for (const seg of segments(command)) {
-    const words = seg.split(/\s+/)
-    if (words[0] === "rm" && words.slice(1).some((w) => !w.startsWith("-") && DEPENDENCIES.test(w.replace(/^\.\//, "").replace(/\/+$/, "")))) {
-      return "node_modules, vendor and lock files come from the profile's install" +
-        (install ? ` (${install})` : "") + ", and deleting them breaks every run after this one. " +
-        "Leave them, and say in the report what was wrong instead. A test that fails to load is a problem to report, not a reinstall."
-    }
+  if (deletesDependency(command)) {
+    return "node_modules, vendor and lock files come from the profile's install" +
+      (install ? ` (${install})` : "") + ", and deleting them breaks every run after this one. " +
+      "Leave them, and say in the report what was wrong instead. A test that fails to load is a problem to report, not a reinstall."
   }
   const kind = profile?.exec?.kind
   const family = RUNNERS[FAMILY[profile?.family]]

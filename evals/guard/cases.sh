@@ -91,6 +91,19 @@ cat > "$work/cases.txt" <<'TABLE'
 2|rm -rf vendor
 2|rm yarn.lock pnpm-lock.yaml
 2|rm -rf poetry.lock Cargo.lock
+# …however it is spelled: quoted, absolute, behind sudo, through find
+2|rm -rf "node_modules"
+2|rm -rf 'vendor/'
+2|rm -rf /work/app/node_modules
+2|sudo rm -rf node_modules
+2|cd . && sudo -E rm -f ./package-lock.json
+2|find . -name node_modules -prune -exec rm -rf {} +
+2|find . -name package-lock.json -delete
+# …and a name that only looks like one is not
+0|rm -rf "build"
+0|rm -rf /work/app/node_modules_backup
+0|find . -name "*.log" -delete
+0|find . -name node_modules -prune -o -name "*.ts" -print
 TABLE
 
 # A project whose profile runs everything in a container (exec.kind image): its
