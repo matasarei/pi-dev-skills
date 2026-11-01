@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      # The guard suite loads the OpenCode plugin under node; ubuntu-latest ships one.
+      # The guard and expander suites load the Pi extensions under node; ubuntu-latest ships one.
       - run: node --version
       - run: bash evals/run-all.sh
 
@@ -31,4 +31,4 @@ jobs:
       # severity=warning: the info-level notices on these files are deliberate,
       # and a newer shellcheck than the runner's would otherwise fail a build by
       # adding notices nobody changed code for.
-      - run: shellcheck --severity=warning lib/*.sh install.sh evals/*.sh evals/*/*.sh
+      - run: shellcheck --severity=warning lib/*.sh evals/*.sh evals/*/*.sh

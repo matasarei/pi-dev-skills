@@ -1,14 +1,14 @@
-# opencode-skills
+# pi-dev-skills
 
 <p>
-  <a href="https://opencode.ai"><img src="https://img.shields.io/badge/OpenCode-1B1B1B?style=for-the-badge" alt="OpenCode" /></a>
+  <a href="https://pi.dev"><img src="https://img.shields.io/badge/Pi_Coding_Agent-1B1B1B?style=for-the-badge" alt="Pi Coding Agent" /></a>
   <img src="https://img.shields.io/badge/Local_models-6E56CF?style=for-the-badge&logo=ollama&logoColor=white" alt="Local models" />
   <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" />
-  <a href="https://github.com/matasarei/opencode-skills/actions/workflows/checks.yml"><img src="https://img.shields.io/github/actions/workflow/status/matasarei/opencode-skills/checks.yml?style=for-the-badge&label=Checks" alt="Checks" /></a>
+  <a href="https://github.com/matasarei/pi-dev-skills/actions/workflows/checks.yml"><img src="https://img.shields.io/github/actions/workflow/status/matasarei/pi-dev-skills/checks.yml?style=for-the-badge&label=Checks" alt="Checks" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-3DA639?style=for-the-badge" alt="License: MIT" /></a>
 </p>
 
-Development skills for [OpenCode](https://opencode.ai) engineered specifically for **local ~30B models** (such as **Qwen3 Coder 30B**, **Prism Bonsai 27B**, and **Qwen3.8 27B**).
+Development skills for [Pi Coding Agent](https://pi.dev) engineered specifically for **local ~30B models** (such as **Qwen3 Coder 30B**, **Prism Bonsai 27B**, and **Qwen3.8 27B**). It continues [opencode-skills](https://github.com/matasarei/opencode-skills), which stays as the frozen OpenCode baseline.
 
 Instead of relying on fragile multi-variable reasoning and prompt guesswork, these skills compute facts before prompts run, replace subjective scoring with binary yes/no checks, verify code quotes mechanically, and advance work one discrete step at a time.
 
@@ -30,94 +30,54 @@ These skills are optimized for ~30B parameter local coding models:
 ## Installation & Setup
 
 ```bash
-git clone https://github.com/matasarei/opencode-skills.git
-cd opencode-skills
+# Pi 1.4.0, the version this package is tested with
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.4.0
 
-# Install globally (to ~/.config/opencode)
-./install.sh
-
-# Or install for current project only (to ./.opencode)
-./install.sh --project
+git clone https://github.com/matasarei/pi-dev-skills.git
+pi install ./pi-dev-skills        # loaded from the checkout, not copied
 ```
 
+`pi install` with a local directory records its path in `~/.pi/agent/settings.json` and loads the package from there. There is nothing to sync after an edit: a changed `SKILL.md` or `lib/` script applies on the next command, and a changed `pi/*.js` after `/reload`. Add `-l` to install it for one project only (written to `.pi/settings.json`, loaded once the project is trusted).
+
 ### Requirements
-* **OpenCode** with skills support.
+* **Pi 1.4.0** (Node.js 22.19 or newer).
 * **Git** and **Bash** (macOS, Linux, or WSL on Windows. Native Windows Git Bash is unsupported).
 * **GitHub CLI (`gh`)** for pull request skills (`gh auth login`).
 * **Docker** (recommended — skills run tests inside project containers by default).
 
-> **Invoking Skills**: In OpenCode, skills installed in `skills/` are accessed via the **`/skills`** picker (type `/skills` in the prompt or use the TUI picker), or loaded as agent tools. They do not autocomplete directly on the root `/` slash (which OpenCode reserves for custom commands).
+> **Invoking Skills**: every skill is a Pi command — type `/dev-plan add a CSV export` or `/dev-implement .tasks/csv-export.md`. They are deliberately not Pi skills: Pi would list each one in the system prompt and leave its `!` lines unrun. `pi/commands.js` registers one command per `skills/*/SKILL.md`, runs those lines with `pi/expand.js` — `$ARGUMENTS` replaced by what you typed, each command run in the project — and sends the result as your message, so the model starts from facts already computed.
 
 ---
 
 ## Configuration
 
-A complete, recommended configuration is provided in [**`opencode.jsonc`**](opencode.jsonc). Copy it to `~/.config/opencode/opencode.jsonc` or your project's `.opencode/opencode.jsonc`.
-
 ### 1. Model Configuration
 
-Local models perform best in agentic loops when **reasoning is turned OFF by default** and the **output ceiling is capped at 16k tokens**:
+A complete provider for LM Studio is in [**`models.example.json`**](models.example.json). Copy it to `~/.pi/agent/models.json` (or merge its `lmstudio` provider into yours), then start Pi on one of its models:
 
-```jsonc
-"models": {
-  "prism-ml/bonsai-27b": {
-    "name": "Prism Bonsai 27B",
-    "attachment": true,
-    "reasoning": true,
-    "tool_call": true,
-    "limit": {
-      "context": 131072,  // 128k context window
-      "output": 16384     // 16k output ceiling
-    },
-    "options": {
-      "reasoning_effort": "none"  // Disables thinking tokens by default
-    },
-    "variants": {
-      "low": { "disabled": true },
-      "medium": { "disabled": true },
-      "high": { "disabled": true },
-      "off": { "reasoning_effort": "none" },
-      "on":  { "reasoning_effort": "medium" }
-    }
-  }
+```bash
+pi --model lmstudio/prism-ml/bonsai-27b
+```
+
+```json
+{
+  "id": "prism-ml/bonsai-27b",
+  "name": "Prism Bonsai 27B",
+  "input": ["text", "image"],
+  "contextWindow": 131072,
+  "maxTokens": 16384,
+  "samplingParams": { "temperature": 0, "reasoning_effort": "none" }
 }
 ```
 
-* **Capabilities (`attachment`, `reasoning`, `tool_call`)**: Declares model capabilities to OpenCode. Prism Bonsai 27B is natively multimodal (vision) and reasoning-capable. Setting `"reasoning": true` allows OpenCode to parse reasoning tokens and support variants.
-* **Why 16k output?** In local inference, thinking tokens share the output budget. 16k gives ample headroom for large diffs, database migrations, and plans without truncation (`finish_reason: length`), while preventing runaway infinite loops (on lower-end 8–12 GB VRAM hardware running 9B models, an 8k output ceiling and 32k context is configured in `opencode.jsonc`).
-* **Why reasoning OFF by default?** While the model is reasoning-capable, in agent loops local models spend 30–90 seconds generating `<think>` tokens before *every single tool call*, often simulating imaginary tool output instead of calling the tool. Setting `"reasoning_effort": "none"` in `options` defaults thinking off, reducing latency to 1–3 seconds so real tool output grounds the model.
-* **On-the-Fly Toggle**: Because `reasoning: true` is enabled, the `variants` block lets you toggle reasoning `on` whenever you need deep architectural planning (switch via `/variant` or `Ctrl+M` / `Cmd+M` in the OpenCode TUI). Built-in `low`, `medium`, and `high` variants are disabled (`"disabled": true`) to keep the picker clean (`Default`, `off`, `on`).
+* **`contextWindow`**: set it to the context length your server is actually configured with. It is what every step is sized against — see [What each window buys](#what-each-window-buys).
+* **Why 16k output (`maxTokens`)?** In local inference, thinking tokens share the output budget. 16k gives ample headroom for large diffs, database migrations, and plans without truncation (`finish_reason: length`), while preventing runaway infinite loops. The 9B entry uses 8k output and a 32k window for 8–12 GB VRAM hardware.
+* **Why reasoning OFF?** In agent loops local models spend 30–90 seconds generating `<think>` tokens before *every single tool call*, often simulating imaginary tool output instead of calling the tool. `samplingParams` sends `"reasoning_effort": "none"` with every request, and the entries leave Pi's own `reasoning` flag off, so no thinking level switches it back on unseen. Latency drops to 1–3 seconds and real tool output grounds the model.
+* **`temperature: 0`**: zero temperature is required for deterministic code reviews and consistent tool use.
 
-### 2. Permissions & Agent Configuration
+### 2. Nothing else to configure
 
-```jsonc
-"permission": {
-  "external_directory": {
-    "/tmp/**": "allow",
-    "/private/tmp/**": "allow"
-  }
-},
-"agent": {
-  "build": {
-    "temperature": 0
-  },
-  "plan": {
-    "temperature": 0,
-    "permission": {
-      "edit": {
-        "*.md": "allow",
-        "**/*.md": "allow",
-        ".tasks/**": "allow",
-        "plans/**": "allow"
-      }
-    }
-  }
-}
-```
-
-* **Scratch Permissions (`/tmp`)**: OpenCode defaults `external_directory` to `ask`. Allowing `/tmp/**` and `/private/tmp/**` lets models write temporary scripts, diffs, and test outputs without stalling autonomous runs, while keeping sensitive paths outside the workspace protected.
-* **`temperature: 0`**: OpenCode defaults Qwen models to `0.55`. Zero temperature is required for deterministic code reviews and consistent tool use.
-* **Plan Mode Permissions**: OpenCode's native `plan` agent blocks file edits by default. Adding permissions for `.tasks/**` and `*.md` allows `/dev-plan` to write and update actionable task files.
+Pi has no plan mode and no per-tool permission prompts: tools run with your own OS permissions, `/dev-plan` writes `.tasks/` like any other file, and `/tmp` needs no allow-list. The guard below is what stands between a model and a destructive git command.
 
 ---
 
@@ -154,7 +114,7 @@ Local models perform best in agentic loops when **reasoning is turned OFF by def
 ```
 
 1. **Initialize (once per repo)**: `/dev-init` inspects the project, writes build/test/lint commands and stack conventions to `AGENTS.md`.
-2. **Plan**: `/dev-plan` resolves input via `plan-input.sh`, validates referenced paths with `plan-check.sh`, and sizes each step using `step-budget.sh` against `contextTokens`, read from your `opencode.jsonc` and overridable with `DEV_SKILLS_CONTEXT`. Shared parsing is handled by `steps.awk`. For targeted bug fixes, `/dev-fix <issue>` investigates root cause and produces a verified plan in `.tasks/fix-<slug>.md`.
+2. **Plan**: `/dev-plan` resolves input via `plan-input.sh`, validates referenced paths with `plan-check.sh`, and sizes each step using `step-budget.sh` against `contextTokens` — the active model's `contextWindow`, which `pi/commands.js` passes as `DEV_SKILLS_CONTEXT`. Shared parsing is handled by `steps.awk`. For targeted bug fixes, `/dev-fix <issue>` investigates root cause and produces a verified plan in `.tasks/fix-<slug>.md`.
 3. **Or plan it for yourself**: `/dev-plan-manual` writes the same task file marked `**Mode:** manual`, then one step's walkthrough at a time as you reach it — anchors, the pattern in this repository to copy the shape of, and why, but never a body you could paste. It is for a repository that does not accept generated code, and for learning a codebase by changing it. `/dev-implement` refuses a plan carrying that marker, `/dev-review` reads hand-written code unchanged and hands its findings back to you rather than to `/dev-fix`, and `branch.sh` refuses the next step until you have committed the last one yourself.
 4. **Build**: `/dev-implement` injects exactly one step via `task-step.sh` onto a stacked branch named `step/<slug>-<n>`.
 5. **Review**: `/dev-review` runs 12 mechanical checks against changed files. If clean, proceed directly to `/dev-pr`. If unfixed blockers or warnings survive, hand off to `/dev-fix` to apply verified findings with one commit per finding.
@@ -175,11 +135,12 @@ prompts and their injected facts summing to ~21k:
 | **64k** | 786 lines | ~28k tokens (42%) | Fits, with about half the window free. |
 | **32k** | 393 lines | ~24.5k tokens (74%) | **Not the full cycle.** Run one skill per session, clearing between them. |
 
-`profile.sh` reads the window from your `opencode.jsonc` — the selected model's `limit.context` —
-and `step-budget.sh` sizes every step against it, so a plan written on a 128k machine is sized
-for 128k. `DEV_SKILLS_CONTEXT` overrides it when your server is configured differently from your
-config file. **A step sized for a window you do not have still runs — it just degrades**, which
-is why the number is detected rather than assumed.
+`pi/commands.js` passes the selected model's `contextWindow` from `models.json` to `profile.sh`
+as `DEV_SKILLS_CONTEXT`, and `step-budget.sh` sizes every step against it, so a plan written on a
+128k machine is sized for 128k. A cached profile reports the window of the model you run now, so
+switching models needs no `--reprofile`. Outside Pi, set `DEV_SKILLS_CONTEXT` yourself; with
+nothing set the default is 100,000. **A step sized for a window you do not have still runs — it
+just degrades**, which is why the number comes from the model rather than being assumed.
 
 The 9B option under [Recommended Models](#recommended-models) is 8–12 GB VRAM at 32k: good for
 `/dev-plan`, `/dev-review` and `/dev-pr` one at a time, not for the cycle in one context.
@@ -273,18 +234,17 @@ writes the body to `.devskills/pr-body.md` and hands you the URL.
 * **A Capped Queue**: `lib/changed.sh` collapses build and vendor output to a count and caps the queue at 200 entries (`DEV_SKILLS_QUEUE_CAP`), announcing the truncation the way `lib/diff.sh` does. The queue is read into a prompt, and an un-ignored `build/` directory took it from three lines to three hundred — three hundred lines a model reads instead of the instructions above them. Because the queue is ordered by risk, the tail is what gets cut.
 * **The Clean-Clone Check**: `lib/verify-clean.sh` clones HEAD somewhere empty and runs the profile's test command there, so a suite cannot pass because of an uncommitted file, a stale install or a cached artefact. It is what a repository with no CI is missing, and only that — no network, no forge, no remote required. Slower than `test.sh` by a clone, so it is deliberate rather than automatic: run it before a pull request, or whenever the profile says `verification: local-only`.
 * **Size Cap**: Each `SKILL.md` is strictly capped at 90 lines and `5,000 bytes` (enforced by `evals/skills/size.sh`) to prevent context bloat.
-* **Testing & Evals**: The entire toolkit is covered by fixture suites. Run `bash evals/run-all.sh` to execute every suite — it prints how many ran and exits non-zero if any failed — or scope to individual tests (`bash evals/lib/<script>.sh`). Lint with `shellcheck --severity=warning lib/*.sh install.sh evals/*.sh evals/*/*.sh`. Run `./install.sh` to sync local changes into `~/.config/opencode/`, then verify skills load in OpenCode via `opencode debug skill` (or `opencode debug skill --print-logs`).
+* **Testing & Evals**: The entire toolkit is covered by fixture suites. Run `bash evals/run-all.sh` to execute every suite — it prints how many ran and exits non-zero if any failed — or scope to individual tests (`bash evals/lib/<script>.sh`). Lint with `shellcheck --severity=warning lib/*.sh evals/*.sh evals/*/*.sh`. `pi install` loads the checkout in place, so there is nothing to sync: run `/reload` after editing `pi/*.js`, and `pi --verbose` to see what loaded at startup.
 
 ---
 
 ## Troubleshooting
 
-* **Skills not showing up on `/`**: In OpenCode, skills are accessed via the **`/skills`** picker, not root `/` command autocomplete. Type `/skills` in OpenCode to select a skill. If `/skills` is empty, check `ls ~/.config/opencode/skills/` and verify each directory has a valid `SKILL.md`.
+* **`/dev-*` commands missing**: `pi list` should show this checkout among the packages. Run `/reload` after a change to `pi/*.js`, and start with `pi --verbose` to see extension errors at startup.
 * **Tool calls truncate or loop**: Server context window is below 64k. Increase context length in LM Studio or set `OLLAMA_CONTEXT_LENGTH=65536`.
 * **Model stuck in a retry loop or context bloated**: Repeated failed tool calls (e.g. failing edits or syntax errors) can fill the context with identical failure traces, trapping `temperature: 0` models in repetitive retry loops:
-  * **Fresh Session (`--continue`)**: Exit OpenCode and start a fresh session, then run `/dev-implement .tasks/<task>.md --continue`. Progress is tracked on disk in `.tasks/` and git branch commits, instantly clearing out thousands of poisoned context tokens.
+  * **Fresh Session (`--continue`)**: Run `/new` for a fresh session, then `/dev-implement .tasks/<task>.md --continue`. Progress is tracked on disk in `.tasks/` and git branch commits, instantly clearing out thousands of poisoned context tokens.
   * **`/compact`**: If staying in the active session, run `/compact` to prune verbose tool error outputs while retaining high-level instructions and decisions, then resume with `/dev-implement .tasks/<task>.md --continue`.
-* **Plan mode refuses to write to `.tasks/`**: Ensure `agent.plan.permission.edit` allows `.tasks/**` in `opencode.jsonc`.
 * **Guard blocked a command**: The guard refused a destructive git command (force-push, commit amend, or base branch push). Commit changes normally and use `/dev-pr`.
 * **Findings dropped as unverifiable**: The model quoted code that did not exist in the file. Ensure `temperature: 0`.
 

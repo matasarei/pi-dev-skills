@@ -52,7 +52,10 @@ for token in \
   'go.mod' \
   'Cargo.toml' \
   'What each window buys' \
-  'limit.context' \
+  'contextWindow' \
+  'models.example.json' \
+  'pi/commands.js' \
+  'pi/expand.js' \
   'verify-clean.sh' \
   'Without CI, or without GitHub' \
   'ci+container' \

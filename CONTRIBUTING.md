@@ -13,7 +13,7 @@ the result.
 
 ## 1. AI-generated contributions are welcome. Manual testing is mandatory.
 
-Contributions written with Claude Code, OpenCode, Cursor or anything else are welcome — this
+Contributions written with Claude Code, Pi, Cursor or anything else are welcome — this
 toolkit is built with them, and pretending otherwise would be dishonest. There is no penalty and
 no separate review track.
 
@@ -46,7 +46,7 @@ If a model wrote a substantial part of the change, add a trailer to the commits 
 the agent and the model**:
 
 ```
-Co-Authored-By: OpenCode x Qwen3 Coder 30B
+Co-Authored-By: Pi x Qwen3 Coder 30B
 Co-Authored-By: Claude Code x Claude Opus 4.5
 ```
 
@@ -125,12 +125,13 @@ or without GitHub** in the README.
 **Before every test run:**
 
 ```bash
-cd /path/to/opencode-skills && ./install.sh     # OpenCode runs the installed copy, not your checkout
-opencode debug skill | grep '"name": "dev-'     # every dev-* skill parses and loads
-opencode debug skill --print-logs | grep -c ERROR   # expect 0
+pi install /path/to/pi-dev-skills   # once: Pi loads the checkout in place, so edits apply
+pi list                             # this checkout is among the packages
+pi --verbose                        # no extension errors at startup; /dev-* commands listed
 ```
 
-Forgetting `./install.sh` is the single most common way to spend an hour testing your previous
+After editing `pi/*.js`, run `/reload` in the session (or restart Pi). A session that has been
+open since before the edit is the single most common way to spend an hour testing your previous
 version.
 
 ### 2.2 What to test, per skill
@@ -196,7 +197,7 @@ version:
 
 ```bash
 bash evals/run-all.sh                                                   # every suite
-shellcheck --severity=warning lib/*.sh install.sh evals/*.sh evals/*/*.sh   # 0 warnings
+shellcheck --severity=warning lib/*.sh evals/*.sh evals/*/*.sh              # 0 warnings
 bash evals/skills/size.sh                                               # 90 lines / 5,000 bytes per skill
 ```
 
@@ -258,7 +259,7 @@ No template to fill; keep it short and in this order.
 - **One coherent change per pull request.** A reviewer should be able to say what it does in one
   sentence. A feature plus an unrelated fix is two reviews pretending to be one.
 - **Open as a draft** (`--draft`), and mark it ready when the checks are green.
-- **Never force-push, amend, or `--no-verify`.** The guard (`lib/dev-guard.js`) refuses them, and
+- **Never force-push, amend, or `--no-verify`.** The guard (`pi/guard.js`) refuses them, and
   it is right to. Push a new commit; a reviewer who has already read the branch can then see what
   changed.
 - **Never push to `main`.** Everything lands through a pull request.
