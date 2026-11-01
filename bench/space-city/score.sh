@@ -71,8 +71,24 @@ outside="${outside# }"
 ticked="$(grep -cE '^[0-9]+\. \[x\]' "$proj/.tasks/funds.md" 2>/dev/null)" || ticked=0
 commits="$(git -C "$proj" rev-list --count "$target..HEAD")"
 branches="$(git -C "$proj" branch --list 'step/*' | wc -l | tr -d ' ')"
-refusals="$(cat "$logs"/step-*.jsonl 2>/dev/null | grep -o 'dev-guard refuses' | wc -l | tr -d ' ')"
-passes="$(cat "$logs"/step-*.jsonl 2>/dev/null | grep -o 'TEST PASS' | wc -l | tr -d ' ')"
+# One per tool result: Pi repeats a result's text in several events of one call,
+# so counting the text across every line counts each refusal four or five times.
+read -r refusals passes <<EOF
+$(node -e '
+  const fs = require("fs"), dir = process.argv[1]
+  let r = 0, p = 0
+  for (const f of fs.readdirSync(dir).filter((f) => /^step-\d+\.jsonl$/.test(f))) {
+    for (const l of fs.readFileSync(`${dir}/${f}`, "utf8").split("\n")) {
+      let e; try { e = JSON.parse(l) } catch { continue }
+      if (e.type !== "tool_execution_end") continue
+      const text = e.result?.content?.[0]?.text ?? ""
+      if (e.isError && text.startsWith("dev-guard refuses")) r++
+      if (text.startsWith("TEST PASS")) p++
+    }
+  }
+  console.log(r, p)
+' "$logs")
+EOF
 
 # --- time and tokens ----------------------------------------------------------
 seconds=0
