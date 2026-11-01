@@ -38,6 +38,9 @@ export function injectionEnv(model) {
 
 export default function devCommands(pi) {
   process.env.DEV_SKILLS_LIB = lib
+  // What the user exported, if anything: a model that declares no window gets
+  // this back, never the window of the model selected before it.
+  const exported = process.env.DEV_SKILLS_CONTEXT
   for (const name of skillNames()) {
     const file = join(skills, name, "SKILL.md")
     pi.registerCommand(name, {
@@ -45,7 +48,9 @@ export default function devCommands(pi) {
       handler: async (args, ctx) => {
         await ctx.waitForIdle()
         const env = injectionEnv(ctx.model)
-        if (env.DEV_SKILLS_CONTEXT) process.env.DEV_SKILLS_CONTEXT = env.DEV_SKILLS_CONTEXT
+        const window = env.DEV_SKILLS_CONTEXT ?? exported
+        if (window === undefined) delete process.env.DEV_SKILLS_CONTEXT
+        else process.env.DEV_SKILLS_CONTEXT = window
         // Read at run time, so an edited SKILL.md applies without /reload.
         const block = await expandSkill(readFileSync(file, "utf8"), {
           args: (args ?? "").trim(),
