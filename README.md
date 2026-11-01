@@ -138,8 +138,9 @@ prompts and their injected facts summing to ~21k:
 `pi/commands.js` passes the selected model's `contextWindow` from `models.json` to `profile.sh`
 as `DEV_SKILLS_CONTEXT`, and `step-budget.sh` sizes every step against it, so a plan written on a
 128k machine is sized for 128k. A cached profile reports the window of the model you run now, so
-switching models needs no `--reprofile`. Outside Pi, set `DEV_SKILLS_CONTEXT` yourself; with
-nothing set the default is 100,000. **A step sized for a window you do not have still runs — it
+switching models needs no `--reprofile`. Outside Pi, set `DEV_SKILLS_CONTEXT` yourself. Inside
+Pi, a value you export applies only to a model whose entry has no `contextWindow`. With nothing set
+the default is 100,000. **A step sized for a window you do not have still runs — it
 just degrades**, which is why the number comes from the model rather than being assumed.
 
 The 9B option under [Recommended Models](#recommended-models) is 8–12 GB VRAM at 32k: good for

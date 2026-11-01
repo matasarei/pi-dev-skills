@@ -499,7 +499,9 @@ fi
 # The context window the step sizing assumes. step-budget.sh turns it into a
 # per-step line cap. It is a recommendation the planner follows when a split
 # exists, not a limit anything refuses on. DEV_SKILLS_CONTEXT overrides it for a
-# machine whose window is bigger or smaller than the default.
+# machine whose window is bigger or smaller than the default. Inside Pi the
+# model's contextWindow takes its place; an exported value applies only to a
+# model that declares none.
 
 # Detected, not assumed. Pi knows the active model's window (contextWindow in
 # ~/.pi/agent/models.json), and pi/commands.js passes it here as
