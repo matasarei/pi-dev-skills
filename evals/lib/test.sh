@@ -199,6 +199,16 @@ red_case pass           'RED NOT PROVEN' 1
 red_case unknown-runner 'RED UNCLEAR |' 1
 printf '%s\n' "$out" | grep -q 'boom' || note 'red unclear: the runner output is not shown below the verdict'
 
+# vitest, from real output (evals/fixtures/vitest, captured in space-city through
+# `npm run test:coverage -- <name>`). A file that never loads prints
+# "Test Files  1 failed (1)" beside "Tests  no tests": that is not a failing test.
+fixtures="$root/evals/fixtures/vitest"
+printf '#!/bin/sh\ncat "%s/$1.txt"\n[ "$1" = pass ]\n' "$fixtures" > "$work/vitest.sh"
+profile '"sh ./runner.sh"' '"sh ./vitest.sh {name}"'
+red_case fail 'RED PROVEN |' 0
+red_case load 'RED UNCLEAR |' 1
+red_case pass 'RED NOT PROVEN' 1
+
 # With no testScoped the whole suite runs and the name never reaches it, so a
 # failure anywhere in the suite is not this test failing. Never PROVEN.
 profile '"sh ./red.sh phpunit-fail"' null

@@ -271,6 +271,12 @@ fi
 
 # Wrap a project command in the resolved prefix.
 wrap() { [ -n "$EXEC_PREFIX" ] && printf '%s %s' "$EXEC_PREFIX" "$1" || printf '%s' "$1"; }
+# Whether package.json's script <name> runs vitest. The name is matched literally,
+# so a script called "test:coverage" is found by that name and nothing else.
+script_runs_vitest() {
+  grep -qsF "\"$1\"" package.json || return 1
+  awk -v k="\"$1\"" 'index($0, k) { s = substr($0, index($0, k) + length(k)); if (s ~ /^[[:space:]]*:[[:space:]]*"vitest/) f = 1 } END { exit !f }' package.json
+}
 
 # ------------------------------------------ 5 install / lint / test / build ---
 #
@@ -305,6 +311,11 @@ if [ -f package.json ]; then
   # other runner's filter behind npm test has been proved here, so it stays null.
   if [ "$TEST" = "$(wrap "npm test")" ] && grep -qsE '"test"[[:space:]]*:[[:space:]]*"node --test' package.json; then
     TEST_SCOPED="$(wrap "env NODE_OPTIONS=--test-name-pattern={name} npm test")"
+  fi
+  # vitest reads a positional argument as a file filter, and npm hands it what
+  # follows `--`; a plan's Red: line names a test file, so that is the scope.
+  if [ "$TEST" = "$(wrap "npm test")" ] && script_runs_vitest test; then
+    TEST_SCOPED="$(wrap "npm test -- {name}")"
   fi
   grep -qs '"build"[[:space:]]*:' package.json && BUILD="$(wrap "npm run build")"
   grep -qs '"lint"[[:space:]]*:' package.json && LINT="$(wrap "npm run lint")"
@@ -451,7 +462,15 @@ if [ -n "$CI_TEST" ]; then
     *go\ test*)   TEST_SCOPED="$(wrap "$CI_TEST -run {name}")" ;;
     npm\ test*|npm\ run\ test*)
       grep -qsE '"test"[[:space:]]*:[[:space:]]*"node --test' package.json \
-        && TEST_SCOPED="$(wrap "env NODE_OPTIONS=--test-name-pattern={name} $CI_TEST")" ;;
+        && TEST_SCOPED="$(wrap "env NODE_OPTIONS=--test-name-pattern={name} $CI_TEST")"
+      # The script CI names, for vitest: `npm test` runs "test", `npm run X` runs X.
+      # A command already passing arguments after `--` is left alone.
+      script="test"
+      case "$CI_TEST" in "npm run "*) script="${CI_TEST#npm run }"; script="${script%% *}" ;; esac
+      case "$CI_TEST" in
+        *' -- '*) ;;
+        *) script_runs_vitest "$script" && TEST_SCOPED="$(wrap "$CI_TEST -- {name}")" ;;
+      esac ;;
   esac
 fi
 

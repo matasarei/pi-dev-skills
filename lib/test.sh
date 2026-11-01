@@ -143,9 +143,12 @@ receipt() {
 # entry after the file ("✖ tests/slug.test.js (26ms)") where a real failure names
 # the test ("✖ truncate cuts (1ms)"), so an entry named like a test file is a
 # load error, as are the error names that say so. Unclear, as Go's build failure is.
+# vitest's "Test Files  1 failed (1)" is its "Test Suites:", printed for a file that
+# never loaded too ("Failed to resolve import", then "Tests  no tests"); its own
+# "Tests  1 failed (1)" is the count.
 failed_as_test() {
   printf '%s\n' "$out" | awk '
-    /Test Suites:/ { next }
+    /Test Suites:/ || /Test Files / { next }
     /SyntaxError:|Cannot find module|MODULE_NOT_FOUND/ { load = 1 }
     /✖ [^ ]*\.[cm]?[jt]sx? \(/ { load = 1 }
     /Tests: *[1-9]/ && /(Failures|Errors): *[1-9]/ { r = 1 }
