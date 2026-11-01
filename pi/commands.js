@@ -71,6 +71,20 @@ export function stepsNamed(command) {
   return named
 }
 
+// Whether a command asks task-step.sh for "the next step" — --next, --continue,
+// or no step at all — which is how a session starts, never something it does
+// mid-step. --count and --paths <n> only read.
+export function asksForNextStep(command) {
+  for (const m of command.matchAll(STEP_SCRIPTS)) {
+    if (m[1] !== "task-step") continue
+    const words = m[2].trim().split(/\s+/).filter(Boolean)
+    if (words.some((w) => w === "--count" || w === "--paths")) continue
+    if (words.some((w) => w === "--next" || w === "--continue")) return true
+    if (!words.slice(1).some((w) => /^\d+$/.test(w.replace(/^["']|["']$/g, "")))) return true
+  }
+  return false
+}
+
 function git(cwd, ...args) {
   try {
     return execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim()
@@ -139,11 +153,12 @@ export function gate(state, event, cwd) {
     }
   }
   if (event.toolName === "bash" && typeof input.command === "string") {
-    const other = stepsNamed(input.command).find((n) => n !== state.step)
+    const next = asksForNextStep(input.command)
+    const other = next ? "the next one" : stepsNamed(input.command).find((n) => n !== state.step)
     if (other !== undefined) {
       return {
         block: true,
-        reason: `${REFUSES}this session is step ${state.step} of ${state.taskFile}; step ${other} starts in its own session. ` +
+        reason: `${REFUSES}this session is step ${state.step} of ${state.taskFile}; ${next ? "the next step" : `step ${other}`} starts in its own session. ` +
           `Finish step ${state.step}, tick it, commit, report — then /new and /dev-implement for the next one.`,
       }
     }

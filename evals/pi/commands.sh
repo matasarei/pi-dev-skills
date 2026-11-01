@@ -120,6 +120,12 @@ await expect("2", "bash", { command: `bash ${lib}/task-step.sh .tasks/plan.md --
 await expect("2", "bash", { command: `bash ${lib}/step-budget.sh ${plan} 2` }, "step-budget.sh for step 2")
 await expect("0", "bash", { command: `bash ${lib}/step-budget.sh ${plan} 1` }, "step-budget.sh for this step")
 await expect("0", "bash", { command: `bash ${lib}/test.sh --scoped plan` }, "test.sh")
+// Asking for "the next step" is how a session starts, not something one does mid-step.
+await expect("2", "bash", { command: `bash ${lib}/task-step.sh .tasks/plan.md --next` }, "task-step.sh --next in a step session")
+await expect("2", "bash", { command: `bash ${lib}/task-step.sh --continue` }, "task-step.sh --continue in a step session")
+await expect("2", "bash", { command: `bash ${lib}/task-step.sh .tasks/plan.md` }, "task-step.sh with no step in a step session")
+await expect("0", "bash", { command: `bash ${lib}/task-step.sh .tasks/plan.md --count` }, "task-step.sh --count")
+await expect("0", "bash", { command: `bash ${lib}/task-step.sh .tasks/plan.md --paths 1` }, "task-step.sh --paths for this step")
 
 // Not done yet: ticked but not committed, committed but not ticked, done but dirty.
 const tick = (on) => execSync(`sed -i.bak 's/^1\\. \\[${on ? " " : "x"}\\]/1. [${on ? "x" : " "}]/' ${JSON.stringify(plan)}`)
