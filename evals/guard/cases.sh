@@ -143,7 +143,8 @@ const findRel = { path: "sample.txt", pattern: "*.txt" }
 await call("find", findRel)
 if (findRel.path !== ".") fail(`a relative find file path was not sanitized to '.': ${findRel.path}`)
 // Bash timeout: Pi counts seconds. Milliseconds are divided down, anything under 30 s is raised to 30, invalid removed.
-for (const [given, want] of [[5, 30], [45, 45], [120000, 120], [1000, 30]]) {
+// 3600 is read as 3600 ms on purpose (see sanitizeBashTimeout): the cutoff stays at 1000.
+for (const [given, want] of [[5, 30], [45, 45], [120000, 120], [1000, 30], [3600, 30]]) {
   const args = { command: `ls # ${given}`, timeout: given }
   await call("bash", args)
   if (args.timeout !== want) fail(`bash timeout: ${given} was not sanitized to ${want}: ${args.timeout}`)

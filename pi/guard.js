@@ -173,7 +173,10 @@ export function sanitizeSearchDir(targetPath, cwd) {
 // harnesses pass milliseconds (timeout: 120000), which Pi reads as 33 hours.
 // Anything of 1000 or more is taken as milliseconds and divided by 1000. Then a
 // floor of 30 s, so heavy commands like grep and tests are not cut off before
-// they start. A timeout that is <= 0 or not a finite number returns undefined,
+// they start. The cost, accepted: a real seconds value of 1000 or more (3600,
+// an hour) is read as milliseconds and runs with 30 s. Millisecond values from
+// 1000 to 29999 are far more common, and read as seconds they would run for
+// hours. A timeout that is <= 0 or not a finite number returns undefined,
 // and the caller deletes it: Pi then runs the command without one.
 export function sanitizeBashTimeout(timeout) {
   if (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout <= 0) {
