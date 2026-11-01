@@ -184,11 +184,14 @@ function deletesDependency(command) {
 }
 
 // One command line as its simple commands: split on ; && || | and newlines,
-// leading `cd …` and VAR=value words dropped. Quoted text is blanked first, so
-// talk about a command is not the command.
+// `cd …` ones dropped, each unwrapped (VAR=value, sudo, env, time…) so a
+// wrapper word cannot hide the runner. Quoted text is blanked first, so talk
+// about a command is not the command.
 function segments(command) {
   const scan = command.replace(/'[^']*'/g, "''").replace(/"[^"]*"/g, '""')
-  return scan.split(/\|\||&&|[;|\n]/).map((s) => s.trim().replace(/^(\w+=\S*\s+)+/, "")).filter((s) => s && !/^cd(\s|$)/.test(s))
+  return scan.split(/\|\||&&|[;|\n]/)
+    .map((s) => unwrap(s.trim().split(/\s+/).filter(Boolean)).join(" "))
+    .filter((s) => s && !/^cd(\s|$)/.test(s))
 }
 
 // The reason to refuse a shell command that runs a project's tooling the wrong

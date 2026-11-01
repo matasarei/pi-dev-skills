@@ -121,6 +121,12 @@ cat > "$work/container-cases.txt" <<'TABLE'
 2|pnpm install
 2|vitest run
 2|node --test
+2:test.sh|time npm test
+2:test.sh|env CI=1 npx vitest run
+2|sudo npm ci
+2|FOO=1 env BAR=2 time npx vitest
+0|time docker run --rm -v "$PWD":/app -w /app node:lts-alpine npm test
+0|env FOO=1 bash $DEV_SKILLS_LIB/test.sh
 0|docker run --rm -v "${PWD}":/app -w /app node:lts-alpine npx vitest run src/x.test.ts
 0|cd . && docker run --rm -v "$PWD":/app -w /app node:lts-alpine npm ci
 0|bash $DEV_SKILLS_LIB/test.sh --scoped costs.test
