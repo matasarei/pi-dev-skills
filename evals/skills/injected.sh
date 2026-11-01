@@ -108,6 +108,15 @@ for skill in "$skills"/*/SKILL.md; do
     printf '%s\n' "$block" | grep -q '^## Step 1 of 1' \
       || note "$name: the step block does not hand over step 1: '$(printf '%s\n' "$block" | grep -m1 '^## Step')'"
   fi
+  # dev-implement's branch is cut before the model reads anything (step-start.sh),
+  # so its block says where the step is. Back to main after, so the skills that
+  # follow see the project as it was.
+  if [ "$name" = dev-implement ]; then
+    printf '%s\n' "$block" | grep -q '^BRANCH step/plan-1 — cut from main' \
+      || note "dev-implement: the block has no BRANCH line from step-start.sh: '$(printf '%s\n' "$block" | grep -m1 'BRANCH')'"
+    printf '%s\n' "$block" | grep -q '^STOP ' && note "dev-implement: a clean project got a STOP: $(printf '%s\n' "$block" | grep -m1 '^STOP ')"
+    git -C "$proj" switch -q main
+  fi
   if [ "$name" = dev-plan ]; then
     printf '%s\n' "$block" | grep -qF "$proj" || note "dev-plan: the block does not name the project root, so the plan may land under ~"
   fi

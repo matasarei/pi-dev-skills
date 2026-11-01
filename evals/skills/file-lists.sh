@@ -50,8 +50,12 @@ impl="$skills/dev-implement/SKILL.md"
 flat "$impl" | grep -q 'NO STEPS → print Next: /dev-plan <task-file> and stop' || note 'dev-implement: NO STEPS must print the Next: line and stop, nothing else'
 # The three sentences the 2026-09-11 runs lacked: an unlisted branch.sh answer
 # let a run commit on master; a bare "scoped test" and a bare script name each
-# sent the model to read scripts instead of running them.
-flat "$impl" | grep -q 'any other answer (no such file, no step, usage:) → quote it and stop' || note 'dev-implement: no rule for a branch.sh answer other than BRANCH'
+# sent the model to read scripts instead of running them. The first is code now:
+# step-start.sh runs branch.sh before the model reads anything and turns any
+# other answer into a STOP that pi/commands.js never sends, so what has to hold
+# is that the injection is there and the model is told not to branch itself.
+grep -q '^!`.*step-start.sh \$ARGUMENTS' "$impl" || note 'dev-implement: no step-start.sh injection — the model would be left to run branch.sh itself'
+flat "$impl" | grep -q 'never run branch.sh' || note 'dev-implement: does not tell the model never to run branch.sh itself'
 flat "$impl" | grep -q 'test.sh --scoped <name>' || note 'dev-implement: the scoped test command is not spelled out'
 flat "$impl" | grep -q 'never cat them' || note 'dev-implement: no rule against reading the dev-lib scripts'
 # Red first: the step's Red: test runs before any production line, and a test

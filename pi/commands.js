@@ -27,6 +27,18 @@ export function skillNames(dir = skills) {
     .sort()
 }
 
+// The lines an injection printed to stop the command: from a line starting
+// "STOP " to the next blank one, or null. lib/step-start.sh prints one when the
+// step's branch is refused or the plan is written to be built by hand — a
+// decision code has already made, so the model is never asked to make it again.
+export function stopLines(block) {
+  const lines = block.split("\n")
+  const i = lines.findIndex((l) => l.startsWith("STOP "))
+  if (i < 0) return null
+  const end = lines.findIndex((l, k) => k > i && l.trim() === "")
+  return lines.slice(i, end < 0 ? undefined : end).join("\n").replace(/^STOP /, "")
+}
+
 // What the injections run with, for the model this session has selected.
 export function injectionEnv(model) {
   const env = { DEV_SKILLS_LIB: lib }
@@ -57,6 +69,12 @@ export default function devCommands(pi) {
           cwd: ctx.cwd,
           env,
         })
+        const stop = stopLines(block)
+        if (stop) {
+          if (ctx.ui?.notify) ctx.ui.notify(`/${name}: ${stop}`, "error")
+          else console.error(`/${name}: ${stop}`)
+          return
+        }
         pi.sendUserMessage(block)
       },
     })
