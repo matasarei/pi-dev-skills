@@ -14,6 +14,11 @@
 
 set -u
 
+# Pi sets DEV_SKILLS_CONTEXT for every command it runs (pi/commands.js), so a
+# suite run from inside Pi would inherit the session's window and fail every
+# case that asserts the default. Each case that wants a window sets its own.
+unset DEV_SKILLS_CONTEXT
+
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 profile="$root/lib/profile.sh"
 [ -f "$profile" ] || { printf 'no profile.sh at %s\n' "$profile" >&2; exit 1; }
@@ -41,10 +46,8 @@ want_runtime() { [ "$(field_in runtime kind)" = "$1" ] || note "$2: runtime.kind
 # deterministically, whatever this machine has.
 stub="$work/bin"; mkdir -p "$stub"
 printf '#!/bin/sh\nexit 1\n' > "$stub/docker"; chmod +x "$stub/docker"
-# HOME is redirected for every case. profile.sh reads ~/.config/opencode when a
-# project declares no window of its own -- correct, that is the config OpenCode
-# falls back to -- so without this the suite would report whatever window the
-# developer running it happens to have configured.
+# HOME is redirected for every case, so nothing in the home directory of the
+# developer running the suite reaches a result.
 nohome="$work/nohome"; mkdir -p "$nohome"
 run() { out="$(cd "$1" && HOME="$nohome" PATH="$stub:$PATH" bash "$profile" "${2:-}" 2>&1)"; }
 
@@ -300,46 +303,37 @@ want_runtime '"cli"' 'python'
 want how '"python main.py"' 'python'
 want contextTokens '100000' 'python'
 
-# contextTokens comes from OpenCode's own config, because assuming it is how a
-# step gets sized for a window the machine does not have. HOME is redirected for
-# these: the search reaches ~/.config/opencode deliberately -- that is the config
-# OpenCode uses when a project has none -- so without this the result would
-# depend on whose machine ran the suite.
-ctx_case() { # ctx_case <dir> <config or empty> <want> <what>
+# contextTokens is the active model's window, which pi/commands.js passes as
+# DEV_SKILLS_CONTEXT. Nothing else sets it: an OpenCode config left in a project
+# is not read, because its window was declared for a different harness.
+ctx_case() { # ctx_case <dir> <DEV_SKILLS_CONTEXT, or empty for unset> <want> <what>
   d="$work/ctx-$1"; mkdir -p "$d"
-  [ -n "$2" ] && printf '%s\n' "$2" > "$d/opencode.jsonc"
-  g "$d" init -q -b main . && g "$d" add -A >/dev/null 2>&1
-  g "$d" -c user.email=t@e commit -qm init --allow-empty
-  got="$(cd "$d" && HOME="$nohome" PATH="$stub:$PATH" bash "$profile" 2>&1 | sed -n 's/.*"contextTokens": *\([0-9]*\).*/\1/p')"
+  g "$d" init -q -b main . && g "$d" commit -qm init --allow-empty
+  if [ -n "$2" ]; then
+    got="$(cd "$d" && HOME="$nohome" DEV_SKILLS_CONTEXT="$2" PATH="$stub:$PATH" bash "$profile" 2>&1 | sed -n 's/.*"contextTokens": *\([0-9]*\).*/\1/p')"
+  else
+    got="$(cd "$d" && HOME="$nohome" PATH="$stub:$PATH" bash "$profile" 2>&1 | sed -n 's/.*"contextTokens": *\([0-9]*\).*/\1/p')"
+  fi
   [ "$got" = "$3" ] || note "contextTokens, $4: got '$got', want $3"
 }
 
-ctx_case declared '{ "model": "lmstudio/qwen/q9b", "provider": { "lmstudio": { "models": {
-  "qwen/q9b": { "limit": { "context": 65536, "output": 8192 } } } } } }' \
-  65536 'a declared window is used'
+ctx_case window 65536 65536 "the model's window is used"
+ctx_case unset '' 100000 'no window falls back'
+ctx_case bad nope 100000 'a malformed window falls back rather than propagating'
 
-ctx_case picks '{ "model": "lmstudio/c/d", "provider": { "lmstudio": { "models": {
-  "a/b": { "limit": { "context": 32768 } },
-  "c/d": { "limit": { "context": 131072 } } } } } }' \
-  131072 'the selected model wins, not the first one listed'
+d="$work/ctx-opencode"; mkdir -p "$d"
+printf '{ "model": "lmstudio/q", "provider": { "lmstudio": { "models": { "q": { "limit": { "context": 65536 } } } } } }\n' > "$d/opencode.jsonc"
+ctx_case opencode '' 100000 'an opencode.jsonc left in the project is not read'
 
-# The case every other fixture here missed: each of them declares a window for
-# every model, so an unbounded scan looked correct. A model that declares none
-# must fall back, not inherit the next model's.
-ctx_case nowindow '{ "model": "lmstudio/a/b", "provider": { "lmstudio": { "models": {
-  "a/b": { "name": "A" },
-  "c/d": { "limit": { "context": 131072 } } } } } }' \
-  100000 'a model declaring no window does not inherit the next one'
-
-ctx_case none '' 100000 'no config falls back'
-ctx_case bad '{ "model": "x/y", "provider": { "p": { "models": { "y": { "limit": { "context": "nope" } } } } } }' \
-  100000 'a malformed value falls back rather than propagating'
-ctx_case noslash '{ "model": "onlyprovider" }' 100000 'a model with no provider prefix falls back'
-
-# The override still wins over a declared window.
-d="$work/ctx-declared"
-got="$(cd "$d" && HOME="$nohome" DEV_SKILLS_CONTEXT=40000 PATH="$stub:$PATH" bash "$profile" --reprofile 2>&1 | sed -n 's/.*"contextTokens": *\([0-9]*\).*/\1/p')"
-[ "$got" = 40000 ] || note "contextTokens: DEV_SKILLS_CONTEXT no longer overrides a declared window (got '$got')"
+# The window belongs to the model, not the repository: a cached profile reports
+# the window DEV_SKILLS_CONTEXT names now, and its own when nothing is set.
+d="$work/ctx-cached"; mkdir -p "$d"
+ctx_case cached 131072 131072 'the window is cached with the profile'
+got="$(cd "$d" && HOME="$nohome" DEV_SKILLS_CONTEXT=32768 PATH="$stub:$PATH" bash "$profile" 2>&1 | sed -n 's/.*"contextTokens": *\([0-9]*\).*/\1/p')"
+[ "$got" = 32768 ] || note "contextTokens: a cached profile did not take the window the model has now (got '$got', want 32768)"
+got="$(cd "$d" && HOME="$nohome" PATH="$stub:$PATH" bash "$profile" 2>&1 | sed -n 's/.*"contextTokens": *\([0-9]*\).*/\1/p')"
+[ "$got" = 131072 ] || note "contextTokens: with nothing set, a cached profile no longer reports its own window (got '$got')"
+grep -q '"contextTokens": 131072' "$d/.devskills/profile.json" || note "contextTokens: reading the cache with another window rewrote it"
 
 # contextTokens: the default, and the DEV_SKILLS_CONTEXT override (a number, unquoted).
 out="$(cd "$py" && PATH="$stub:$PATH" DEV_SKILLS_CONTEXT=64000 bash "$profile" --reprofile 2>&1)"

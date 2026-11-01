@@ -131,16 +131,10 @@ else
   say house-style ""
 fi
 
-# Model detection: env var, project config, or global config
-MODEL="${OPENCODE_MODEL:-${MODEL:-}}"
-if [ -z "$MODEL" ]; then
-  for cfg in opencode.jsonc opencode.json .opencode.jsonc .opencode.json .opencode/opencode.jsonc .opencode/opencode.json "${HOME}/.config/opencode/opencode.jsonc" "${HOME}/.config/opencode/opencode.json"; do
-    if [ -f "$cfg" ]; then
-      MODEL="$(sed -n 's/^[[:space:]]*"model"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$cfg" | head -1)"
-      [ -n "$MODEL" ] && break
-    fi
-  done
-fi
+# The model, for the PR footer: Pi exports PI_MODEL to the commands it runs —
+# the bash tool and, through pi/commands.js, the skills' injections. MODEL
+# names it for a run outside Pi.
+MODEL="${PI_MODEL:-${MODEL:-}}"
 say model "${MODEL:-unknown}"
 
 # The branch against its remote and its base.

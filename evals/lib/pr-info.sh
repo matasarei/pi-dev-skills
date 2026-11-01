@@ -13,6 +13,10 @@
 
 set -u
 
+# Pi sets PI_MODEL for every command it runs, so a suite run from inside Pi
+# would report the session's model. The cases that want one set their own.
+unset PI_MODEL MODEL
+
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 script="$root/lib/pr-info.sh"
 [ -f "$script" ] || { printf 'no pr-info.sh at %s\n' "$script" >&2; exit 1; }
@@ -92,10 +96,17 @@ printf '%s\n' "$out" | grep -q '^pr: 11$' || note "step 1: pr = '$(row pr)', wan
 want house-style 'feat: earlier;fix: before that' 'step 1'
 want model 'unknown' 'default model when no config present'
 
-# Model detected from local opencode.jsonc
+# The model Pi names for the session, and MODEL for a run outside Pi
+PI_MODEL=qwen/qwen3-coder-30b run
+want model 'qwen/qwen3-coder-30b' 'model from PI_MODEL'
+MODEL=bonsai-27b run
+want model 'bonsai-27b' 'model from MODEL outside Pi'
+PI_MODEL=qwen/qwen3-coder-30b MODEL=bonsai-27b run
+want model 'qwen/qwen3-coder-30b' 'PI_MODEL wins over MODEL'
+# An OpenCode config left in the project is not read any more
 printf '{\n  "model": "qwen3-coder-30b"\n}\n' > "$repo/opencode.jsonc"
 run
-want model 'qwen3-coder-30b' 'model detected from opencode.jsonc'
+want model 'unknown' 'an opencode.jsonc left in the project is not read'
 rm -f "$repo/opencode.jsonc"
 
 # Step 2, cut from step 1, unpushed, with one planned and one unplanned change.

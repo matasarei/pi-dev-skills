@@ -21,8 +21,14 @@ case "${1:-}" in
   --reprofile) rm -f "$CACHE" ;;
 esac
 
+# The window belongs to the model, not the repository: a cached profile still
+# reports the window DEV_SKILLS_CONTEXT names now, so a model switched since the
+# cache was written is sized for the window it has.
 if [ -f "$CACHE" ] && [ "${1:-}" != "--reprofile" ]; then
-  cat "$CACHE"
+  case "${DEV_SKILLS_CONTEXT:-}" in
+    ''|*[!0-9]*) cat "$CACHE" ;;
+    *) sed "s/\"contextTokens\":[[:space:]]*[0-9]*/\"contextTokens\": $DEV_SKILLS_CONTEXT/" "$CACHE" ;;
+  esac
   exit 0
 fi
 
@@ -72,7 +78,7 @@ case "$(uname -s 2>/dev/null || echo unknown)" in
     # container mounts land in the wrong place and a false pass reads like a real
     # one. WSL is a real Linux kernel and needs none of the special cases.
     echo "Native Windows (Git Bash / MSYS / Cygwin) is not supported." >&2
-    echo "Run OpenCode inside WSL and install there — everything works as on Linux." >&2
+    echo "Run Pi inside WSL and install there — everything works as on Linux." >&2
     echo "Keep repositories in the WSL filesystem, not under /mnt/c, or git will be slow." >&2
     exit 78
     ;;
@@ -495,49 +501,14 @@ fi
 # exists, not a limit anything refuses on. DEV_SKILLS_CONTEXT overrides it for a
 # machine whose window is bigger or smaller than the default.
 
-# Detected, not assumed. OpenCode's config already declares the window per model
-# and pr-info.sh already reads that file for the model name, so the number is
-# there to be had. Assuming it is the expensive mistake: a step sized for 100k on
-# a 64k machine authorises half again what fits, and on a 32k one it authorises
-# the whole window before the model writes a line -- silently, because an
-# oversized step still runs, it just degrades.
-context_from_config() { # the selected model's limit.context, or nothing
-  for cfg in opencode.jsonc opencode.json .opencode.jsonc .opencode.json \
-             .opencode/opencode.jsonc .opencode/opencode.json \
-             "${HOME}/.config/opencode/opencode.jsonc" "${HOME}/.config/opencode/opencode.json"; do
-    [ -f "$cfg" ] || continue
-    # "model": "<provider>/<key>" — the key is everything after the first slash,
-    # because a key may itself contain one ("prism-ml/bonsai-27b").
-    sel="$(sed -n 's/.*"model"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$cfg" | head -1)"
-    key="${sel#*/}"
-    [ -n "$key" ] && [ "$key" != "$sel" ] || continue
-    # The first "context" inside *that model's own block*, bounded by brace depth.
-    # Without the bound the scan runs to end of file, so a model declaring no
-    # window silently reports the next model's — which is the same wrong answer
-    # this whole detection exists to prevent, reached a different way.
-    n="$(awk -v k="\"$key\":" '
-      function braces(s, c,   n, i) {
-        n = 0
-        for (i = 1; i <= length(s); i++) if (substr(s, i, 1) == c) n++
-        return n
-      }
-      !inblock && index($0, k) { inblock = 1 }
-      inblock {
-        if (match($0, /"context"[[:space:]]*:[[:space:]]*[0-9]+/)) {
-          v = substr($0, RSTART, RLENGTH); sub(/.*[^0-9]/, "", v); print v; exit
-        }
-        depth += braces($0, "{") - braces($0, "}")
-        if (depth <= 0) exit   # the block closed and never declared one
-      }
-    ' "$cfg")"
-    case "$n" in ''|*[!0-9]*) continue ;; esac
-    printf '%s' "$n"; return 0
-  done
-  return 1
-}
-
+# Detected, not assumed. Pi knows the active model's window (contextWindow in
+# ~/.pi/agent/models.json), and pi/commands.js passes it here as
+# DEV_SKILLS_CONTEXT whenever a skill runs. Assuming it is the expensive
+# mistake: a step sized for 100k on a 64k machine authorises half again what
+# fits, and on a 32k one it authorises the whole window before the model writes
+# a line -- silently, because an oversized step still runs, it just degrades.
+# Run outside Pi, with nothing set, the default stands.
 CONTEXT="${DEV_SKILLS_CONTEXT:-}"
-[ -z "$CONTEXT" ] && CONTEXT="$(context_from_config)"
 case "$CONTEXT" in ''|*[!0-9]*) CONTEXT=100000 ;; esac
 
 # ----------------------------------------------------------- 8 hasDatabase ---
