@@ -30,7 +30,7 @@ for token in \
   'task-step.sh' \
   'plan-input.sh' \
   'steps.awk' \
-  'dev-guard.js' \
+  'pi/guard.js' \
   'evals/run-all.sh' \
   'evals/guard/cases.sh' \
   'evals/skills/size.sh' \
@@ -52,7 +52,10 @@ for token in \
   'go.mod' \
   'Cargo.toml' \
   'What each window buys' \
-  'limit.context' \
+  'contextWindow' \
+  'models.example.json' \
+  'pi/commands.js' \
+  'pi/expand.js' \
   'verify-clean.sh' \
   'Without CI, or without GitHub' \
   'ci+container' \

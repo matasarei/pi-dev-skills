@@ -3,9 +3,11 @@
 #
 #   bash evals/skills/frontmatter.sh
 #
-# OpenCode loads a skill only when SKILL.md sits in a directory whose name is
-# the frontmatter's name, and the README's troubleshooting section sends people
-# here first. The rest is what makes the prompts work at all on a local model:
+# pi/commands.js names each command after its skill's directory, and the
+# Agent Skills spec the files follow wants that directory to be the
+# frontmatter's name, so the two must agree. The README's troubleshooting
+# section sends people here first. The rest is what makes the prompts work at
+# all on a local model:
 # a one-line description, and the injected blocks that hand the model its facts
 # (the profile, at least) instead of asking it to work them out.
 #

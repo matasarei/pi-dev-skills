@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# The block the model actually sees, assembled the way OpenCode assembles it:
+# The block the model actually sees, assembled by pi/expand.js — the code the
+# Pi commands run:
 #
 #   bash evals/skills/injected.sh
 #
@@ -7,12 +8,13 @@
 # scripts put in front of the model once a skill's "!`…`" lines have run —
 # and that is where the 2026-09-11 failures lived: a run got a step with no
 # task-file path, invented one, and built with no branch. This suite takes
-# each SKILL.md, runs its injected commands in a throwaway project with
+# each SKILL.md, expands it with pi/expand.js in a throwaway project with
 # DEV_SKILLS_LIB pointing at this checkout's lib/, substituting $ARGUMENTS
 # the way each skill is typically invoked, and asserts what the model reads:
 #
-#   - no line is a usage message, a "command not found", or a stray
-#     "$ARGUMENTS" — each means the model was handed the toolkit's problem;
+#   - no line is a usage message, a "command not found", a stray
+#     "$ARGUMENTS", or an injection left unrun — each means the model was
+#     handed the toolkit's problem;
 #   - a skill that injects task-step.sh with a plan gets the step, and its
 #     absolute "**Task file:**" line, so the model can pass the path on;
 #   - dev-plan's block names the project root, so the plan lands under it;
@@ -21,11 +23,11 @@
 #
 # $ARGUMENTS is replaced as raw unquoted text, which is how OpenCode was seen
 # to do it on 2026-09-11 (a typed path reached plan-input.sh and task-step.sh
-# whole, a sentence reached them as words). If OpenCode changes that, this
-# substitution is the line to change.
+# whole, a sentence reached them as words). pi/expand.js keeps that rule, so
+# the skills read the same under Pi.
 #
-# Injections that call gh reach the network and are skipped, named as such.
-# Needs git. Exits 0 when the blocks read as they should, 1 otherwise.
+# Injections that call gh reach the network and are skipped (--offline).
+# Needs git and node. Exits 0 when the blocks read as they should, 1 otherwise.
 
 set -u
 
@@ -33,6 +35,7 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 skills="$root/skills"
 [ -d "$skills" ] || { printf 'no skills at %s\n' "$skills" >&2; exit 1; }
 command -v git >/dev/null 2>&1 || { printf 'injected: git is required — not installed\n' >&2; exit 1; }
+command -v node >/dev/null 2>&1 || { printf 'injected: node is required to run pi/expand.js — not installed\n' >&2; exit 1; }
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT INT TERM
@@ -87,22 +90,13 @@ for skill in "$skills"/*/SKILL.md; do
   stray="$(grep -v '^!`' "$skill" | grep -c '\$ARGUMENTS')"
   [ "$stray" -eq 0 ] || note "$name: \$ARGUMENTS appears $stray time(s) outside an injection"
 
-  block=""; ran=0
-  while IFS= read -r line; do
-    cmd="${line#\!\`}"; cmd="${cmd%\`}"
-    # An injection that starts with gh reaches the network and is skipped.
-    # pr-comments.sh calls gh too, but exits before it does in a project with
-    # no remote — which is why the throwaway project must never get one.
-    case "$cmd" in gh\ *|*\ gh\ *) continue ;; esac
-    cmd="${cmd//\$ARGUMENTS/$args}"
-    out="$(cd "$proj" && DEV_SKILLS_LIB="$root/lib" bash -c "$cmd" 2>&1)"
-    block="$block
-$out"
-    ran=$((ran + 1))
-  done <<EOF
-$(grep '^!`' "$skill")
-EOF
+  ran="$(grep -c '^!`' "$skill")"
   [ "$ran" -gt 0 ] || continue
+  # --offline skips an injection that starts with gh: it reaches the network.
+  # pr-comments.sh calls gh too, but exits before it does in a project with
+  # no remote — which is why the throwaway project must never get one.
+  block="$(cd "$proj" && DEV_SKILLS_LIB="$root/lib" node "$root/pi/expand.js" --offline "$skill" "$args" 2>&1)"
+  printf '%s\n' "$block" | grep -q '^!`' && note "$name: an injection reached the model unrun: $(printf '%s\n' "$block" | grep -m1 '^!`')"
 
   printf '%s\n' "$block" | grep -qi '^usage:' && note "$name: an injection printed a usage line — the model is handed the toolkit's problem: $(printf '%s\n' "$block" | grep -i -m1 '^usage:')"
   printf '%s\n' "$block" | grep -q 'command not found' && note "$name: an injection could not run: $(printf '%s\n' "$block" | grep -m1 'command not found')"

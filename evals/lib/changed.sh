@@ -14,6 +14,11 @@
 
 set -u
 
+# Pi sets DEV_SKILLS_CONTEXT for every command it runs (pi/commands.js), so a
+# suite run from inside Pi would inherit the session's window and fail every
+# case that asserts the default. Each case that wants a window sets its own.
+unset DEV_SKILLS_CONTEXT DEV_SKILLS_QUEUE_CAP
+
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 changed="$root/lib/changed.sh"
 [ -f "$changed" ] || { printf 'no changed.sh at %s\n' "$changed" >&2; exit 1; }

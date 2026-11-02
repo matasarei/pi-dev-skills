@@ -4,3 +4,4 @@
 .tasks/
 .gku/
 .claude/
+bench/*/runs/
