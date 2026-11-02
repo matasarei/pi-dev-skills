@@ -141,6 +141,14 @@ want testScoped 'null' 'a jest suite has no proven scoped form'
 mkdir -p "$work/nodeci/.github/workflows" && printf '{"name":"w","private":true,"scripts":{"test":"node --test"}}\n' > "$work/nodeci/package.json"
 printf 'jobs:\n  t:\n    steps:\n      - run: npm test\n' > "$work/nodeci/.github/workflows/ci.yml"
 manifest_case nodeci Node 'npm test' 'env NODE_OPTIONS=--test-name-pattern={name} npm test'
+# vitest reads a positional argument as a file filter, which is what a plan's
+# Red: line names, and npm passes what follows `--` on to it. Both the plain
+# script and a CI command naming a vitest script get it.
+mkdir -p "$work/nodevitest" && printf '{"name":"w","private":true,"scripts":{"test":"vitest"}}\n' > "$work/nodevitest/package.json"
+manifest_case nodevitest Node 'npm test' 'npm test -- {name}'
+mkdir -p "$work/vitestci/.github/workflows" && printf '{"name":"w","private":true,"scripts":{"test":"vitest","test:coverage":"vitest run --coverage"}}\n' > "$work/vitestci/package.json"
+printf 'jobs:\n  t:\n    steps:\n      - run: npm run test:coverage\n' > "$work/vitestci/.github/workflows/ci.yml"
+manifest_case vitestci Node 'npm run test:coverage' 'npm run test:coverage -- {name}'
 
 # CI is the authority over the manifest default: whatever the workflow runs is
 # what actually gates the project.

@@ -1,0 +1,39 @@
+
+> mars-city@1.0.0 test:coverage
+> vitest run --coverage cell.test
+
+
+ RUN  v1.6.1 /app
+      Coverage enabled with v8
+
+ ✓ src/__tests__/cell.test.ts  (2 tests) 2ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  22:16:07
+   Duration  1.43s (transform 26ms, setup 0ms, collect 27ms, tests 2ms, environment 534ms, prepare 79ms)
+
+ % Coverage report from v8
+------------------|---------|----------|---------|---------|-------------------
+File              | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+------------------|---------|----------|---------|---------|-------------------
+All files         |    1.89 |    33.33 |   18.18 |    1.89 |                   
+ core             |    7.71 |       50 |   28.57 |    7.71 |                   
+  cell.ts         |     100 |      100 |     100 |     100 |                   
+  cityManager.ts  |       0 |        0 |       0 |       0 | 1-123             
+  grid.ts         |       0 |        0 |       0 |       0 | 1-75              
+  simulation.ts   |       0 |        0 |       0 |       0 | 1-338             
+  terrain.ts      |     100 |      100 |     100 |     100 |                   
+  zone.ts         |      60 |       50 |       0 |      60 | 19-27,30-34       
+ renderer         |       0 |        0 |       0 |       0 |                   
+  assetFactory.ts |       0 |        0 |       0 |       0 | 1-916             
+  index.ts        |       0 |        0 |       0 |       0 | 1-701             
+ ui               |       0 |        0 |       0 |       0 |                   
+  advisor.ts      |       0 |        0 |       0 |       0 | 1-109             
+  index.ts        |       0 |        0 |       0 |       0 | 1-107             
+------------------|---------|----------|---------|---------|-------------------
+npm notice
+npm notice New major version of npm available! 11.16.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

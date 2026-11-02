@@ -56,6 +56,9 @@ for token in \
   'models.example.json' \
   'pi/commands.js' \
   'pi/expand.js' \
+  'pi/edit.js' \
+  'step-start.sh' \
+  'evals/pi/edit.sh' \
   'verify-clean.sh' \
   'Without CI, or without GitHub' \
   'ci+container' \

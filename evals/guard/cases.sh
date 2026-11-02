@@ -78,7 +78,89 @@ cat > "$work/cases.txt" <<'TABLE'
 # allowed — nothing to do with git, or nothing to read
 0|ls -la
 0|rm -rf build
+0|rm -rf coverage dist
+0|rm src/vendor.ts
+0|rm -rf src/vendor-utils
+# refused under any profile — dependencies and lock files come from the
+# profile's install; a run that deleted them broke every test after it
+2:install|rm -rf node_modules package-lock.json && npm ci
+2|rm -rf node_modules
+2|cd . && rm -rf ./node_modules/
+2|rm package-lock.json
+2|rm -f composer.lock
+2|rm -rf vendor
+2|rm yarn.lock pnpm-lock.yaml
+2|rm -rf poetry.lock Cargo.lock
+# …however it is spelled: quoted, absolute, behind sudo, through find
+2|rm -rf "node_modules"
+2|rm -rf 'vendor/'
+2|rm -rf /work/app/node_modules
+2|sudo rm -rf node_modules
+2|cd . && sudo -E rm -f ./package-lock.json
+2|find . -name node_modules -prune -exec rm -rf {} +
+2|find . -name package-lock.json -delete
+# …and a name that only looks like one is not
+0|rm -rf "build"
+0|rm -rf /work/app/node_modules_backup
+0|find . -name "*.log" -delete
+0|find . -name node_modules -prune -o -name "*.ts" -print
 TABLE
+
+# A project whose profile runs everything in a container (exec.kind image): its
+# runners and installers run bare on the host use the host's binaries, which is
+# how the bench's first run broke node_modules. Refused, with the command to use;
+# the same commands through the container, or through test.sh, are allowed.
+cat > "$work/container-cases.txt" <<'TABLE'
+2:test.sh|npx vitest run src/__tests__/costs.test.ts
+2:test.sh|cd /some/where && npx vitest run src/a.test.ts 2>&1 | tail -80
+2:npm ci|npm ci
+2:npm ci|cd . && npm install
+2|npm run test:coverage
+2|npm test
+2|yarn test
+2|pnpm install
+2|vitest run
+2|node --test
+2:test.sh|time npm test
+2:test.sh|env CI=1 npx vitest run
+2|sudo npm ci
+2|FOO=1 env BAR=2 time npx vitest
+0|time docker run --rm -v "$PWD":/app -w /app node:lts-alpine npm test
+0|env FOO=1 bash $DEV_SKILLS_LIB/test.sh
+0|docker run --rm -v "${PWD}":/app -w /app node:lts-alpine npx vitest run src/x.test.ts
+0|cd . && docker run --rm -v "$PWD":/app -w /app node:lts-alpine npm ci
+0|bash $DEV_SKILLS_LIB/test.sh --scoped costs.test
+0|bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/test.sh
+0|git status
+0|grep -rn "npm ci" src/
+0|cat package.json
+0|node -e "console.log(1)"
+0|echo "run npm ci in the container"
+0|ls node_modules
+TABLE
+mkdir -p "$work/container/.devskills"
+printf '{\n  "family": "node",\n  "exec": {\n    "kind": "image",\n    "prefix": "docker run --rm -v \\"${PWD}\\":/app -w /app node:lts-alpine",\n    "note": null\n  },\n  "install": "docker run --rm -v \\"${PWD}\\":/app -w /app node:lts-alpine npm ci"\n}\n' > "$work/container/.devskills/profile.json"
+
+# PHP in a container: its own runners.
+cat > "$work/phpcontainer-cases.txt" <<'TABLE'
+2|composer install
+2|vendor/bin/phpunit --filter X
+2|php artisan test
+0|docker run --rm -v "$PWD":/app -w /app composer:lts composer install
+0|npm ci
+TABLE
+mkdir -p "$work/phpcontainer/.devskills"
+printf '{ "family": "php-library", "exec": { "kind": "image", "prefix": "docker run --rm -v \\"${PWD}\\":/app -w /app composer:lts" }, "install": null }\n' > "$work/phpcontainer/.devskills/profile.json"
+
+# The same commands on a host profile are how that project runs: allowed.
+cat > "$work/host-cases.txt" <<'TABLE'
+0|npx vitest run src/__tests__/costs.test.ts
+0|npm ci
+0|cd . && npm install
+0|composer install
+TABLE
+mkdir -p "$work/hostprofile/.devskills"
+printf '{ "family": "node", "exec": { "kind": "host", "prefix": null }, "install": "npm ci" }\n' > "$work/hostprofile/.devskills/profile.json"
 
 # The same table with a profile naming another base branch: it is refused too,
 # and main and master still are.
@@ -119,9 +201,11 @@ const verdict = async (toolName, input) => {
 for (const line of readFileSync(casesPath, "utf8").split("\n")) {
   if (!line || line.startsWith("#")) continue
   const i = line.indexOf("|")
-  const want = line.slice(0, i), cmd = line.slice(i + 1)
+  // "2:text" is a refusal whose reason has to contain text: the command to use.
+  const [want, mustSay] = line.slice(0, i).split(":"), cmd = line.slice(i + 1)
   const [got, reason] = await verdict("bash", { command: cmd })
   if (got !== want) fail(`want=${want} got=${got}  ${cmd}${reason ? "  (" + reason + ")" : ""}`)
+  else if (mustSay && !reason.includes(mustSay)) fail(`the reason does not say '${mustSay}': ${cmd}  (${reason})`)
 }
 // Another tool's arguments are never read: an edit whose text mentions a push is not a push.
 if ((await verdict("edit", { command: "git push --force" }))[0] !== "0") fail("a non-bash tool was refused")
@@ -218,6 +302,9 @@ node "$work/run.mjs" "$plugin" "$work/profile-cases.txt" "$work/withprofile" 'pr
 node "$work/run.mjs" "$plugin" "$work/onbase-cases.txt" "$work/onbase" 'on-master' || fails=$((fails + 1))
 node "$work/run.mjs" "$plugin" "$work/onstep-cases.txt" "$work/onstep" 'on-step' || fails=$((fails + 1))
 node "$work/run.mjs" "$plugin" "$work/onbase-cases.txt" "$work/onrelease" 'on-release' || fails=$((fails + 1))
+node "$work/run.mjs" "$plugin" "$work/container-cases.txt" "$work/container" 'container' || fails=$((fails + 1))
+node "$work/run.mjs" "$plugin" "$work/phpcontainer-cases.txt" "$work/phpcontainer" 'php-container' || fails=$((fails + 1))
+node "$work/run.mjs" "$plugin" "$work/host-cases.txt" "$work/hostprofile" 'host' || fails=$((fails + 1))
 
 if [ "$fails" -eq 0 ]; then
   printf 'guard: all cases pass\n'

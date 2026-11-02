@@ -15,14 +15,7 @@ description: Build one step of a task file per run, on its own stacked branch �
 
 Uncommitted changes not yours → stop and ask. Resuming (`--continue`) → the path status below tells in-progress work from foreign edits.
 
-**Branch** — `step/<slug>-<n>`, stacked on the previous. Run it, never derive it; `<task-file>` is the `**Task file:**` line below (`.tasks/` is hidden from globs):
-
-```
-bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/branch.sh <task-file> <n>
-bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/step-budget.sh <task-file> <n>
-```
-
-`BRANCH …` and you are on it; `BRANCH refused` → say so and stop; any other answer (`no such file`, `no step`, `usage:`) → quote it and stop. OVER budget → say so and suggest `/new` before `/dev-review`; never refuse the step.
+**Branch** — `step/<slug>-<n>`, already set by `step-start.sh` (`branch.sh`, then `step-budget.sh`): its `BRANCH …` and `Budget:` lines are under **Branch** below; never run `branch.sh`. `<task-file>` for `tick.sh` is the `**Task file:**` line. OVER budget → say so and suggest `/new` before `/dev-review`; never refuse the step.
 
 ## Step 2 — Build
 
@@ -66,6 +59,10 @@ Then: `Next: /dev-review`. After `/dev-pr`, the next step: `/dev-implement <task
 ---
 
 ## This repository
+
+Branch:
+
+!`bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/step-start.sh $ARGUMENTS 2>&1`
 
 Profile:
 

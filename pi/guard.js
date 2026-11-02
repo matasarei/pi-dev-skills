@@ -12,6 +12,10 @@
 //   git commit while HEAD is on main, master, or the profile's baseBranch
 //   gh pr merge, gh pr review --approve, gh release create|edit|delete|upload,
 //   gh workflow run|enable|disable, gh api …/merge
+//   rm of node_modules, vendor or a lock file, which the profile's install provides
+//   a project's test runner or installer run bare on the host when its profile
+//   runs in a container (exec.kind image or compose); the refusal names test.sh,
+//   the profile's install, or its exec.prefix
 //
 // Before any tool runs, it also repairs the argument mistakes local models make
 // most — an unescaped backslash in a grep pattern, a file passed to find as its
@@ -114,6 +118,103 @@ export function reasonToRefuse(command, bases, onBranch) {
     if (has(`git${SEG}push${SEG}(\\s|:)\\+?(refs/heads/)?${literal(b)}(\\s|:|$)`)) {
       return `a push to the base branch '${b}'. A change lands through a pull request — /dev-pr opens it.`
     }
+  }
+  return null
+}
+
+// The profile written for this directory, or null.
+export function readProfile(directory) {
+  try {
+    return JSON.parse(readFileSync(join(directory, ".devskills", "profile.json"), "utf8"))
+  } catch {
+    return null
+  }
+}
+
+// What a family runs its tests and installs with. A project whose profile runs
+// in a container runs these through it; bare on the host they use the host's
+// binaries, which is how a bench run replaced the container's node_modules with
+// macOS ones. Plain `node`, `php -l` and the like are not in here on purpose:
+// a quick script on the host is not a test run.
+const RUNNERS = {
+  node: /^(npx|npm|pnpm|yarn|vitest|jest)(\s|$)|^node\s(.*\s)?--test(\s|$)/,
+  php: /^(composer|phpunit|(\.\/)?vendor\/bin\/\S+)(\s|$)|^php\s+(artisan|(\.\/)?vendor\/bin\/)/,
+  python: /^(pytest|pip3?|tox|poetry)(\s|$)|^python3?\s+-m\s+(pytest|pip)(\s|$)/,
+}
+const FAMILY = {
+  node: "node", "php-app": "php", "php-library": "php", "moodle-plugin": "php", cms: "php", "python-app": "python",
+}
+const INSTALLS = /^(npm|pnpm|yarn|composer|pip3?|poetry)\s+(ci|i|install|add|require|update)(\s|$)|^yarn$|^python3?\s+-m\s+pip\s+install/
+// What `install` puts back. Deleting one breaks every run after it.
+const DEPENDENCIES = /^(node_modules|vendor|package-lock\.json|yarn\.lock|pnpm-lock\.yaml|composer\.lock|poetry\.lock|Cargo\.lock)$/
+
+// A command's words without the ones that only wrap it: VAR=value assignments,
+// and sudo, env, time, nohup, command and exec with their own flags.
+const WRAPPERS = /^(sudo|env|time|nohup|command|exec)$/
+function unwrap(words) {
+  let i = 0
+  while (i < words.length) {
+    if (/^\w+=/.test(words[i])) { i++; continue }
+    if (!WRAPPERS.test(words[i])) break
+    i++
+    while (words[i]?.startsWith("-")) i++
+  }
+  return words.slice(i)
+}
+
+const unquote = (word) => word.replace(/^(['"])(.*)\1$/, "$2")
+// Whether a path names something install provides: by its last component,
+// quoted or not, relative or absolute.
+const isDependency = (word) => DEPENDENCIES.test(unquote(word).replace(/\/+$/, "").split("/").pop())
+
+// Whether a command deletes what install provides — rm of it, or find naming it
+// with -delete or -exec rm. Read from the command as written: quotes are what a
+// model reaches for once the bare form is refused, so they are not blanked here.
+function deletesDependency(command) {
+  for (const seg of command.split(/\|\||&&|[;|\n]/)) {
+    const words = unwrap(seg.trim().split(/\s+/).filter(Boolean))
+    if (words[0] === "rm" && words.slice(1).some((w) => !w.startsWith("-") && isDependency(w))) return true
+    if (words[0] === "find") {
+      const deletes = words.includes("-delete") || words.some((w, k) => w === "-exec" && /^(\/bin\/)?rm$/.test(words[k + 1] ?? ""))
+      const names = words.some((w, k) => /^-(i?name|path)$/.test(w) && isDependency(words[k + 1] ?? ""))
+      if (deletes && names) return true
+    }
+  }
+  return false
+}
+
+// One command line as its simple commands: split on ; && || | and newlines,
+// `cd …` ones dropped, each unwrapped (VAR=value, sudo, env, time…) so a
+// wrapper word cannot hide the runner. Quoted text is blanked first, so talk
+// about a command is not the command.
+function segments(command) {
+  const scan = command.replace(/'[^']*'/g, "''").replace(/"[^"]*"/g, '""')
+  return scan.split(/\|\||&&|[;|\n]/)
+    .map((s) => unwrap(s.trim().split(/\s+/).filter(Boolean)).join(" "))
+    .filter((s) => s && !/^cd(\s|$)/.test(s))
+}
+
+// The reason to refuse a shell command that runs a project's tooling the wrong
+// way or deletes what install provides, or null.
+export function reasonToRefuseRun(command, profile) {
+  if (typeof command !== "string") return null
+  const install = typeof profile?.install === "string" && profile.install ? profile.install : null
+  if (deletesDependency(command)) {
+    return "node_modules, vendor and lock files come from the profile's install" +
+      (install ? ` (${install})` : "") + ", and deleting them breaks every run after this one. " +
+      "Leave them, and say in the report what was wrong instead. A test that fails to load is a problem to report, not a reinstall."
+  }
+  const kind = profile?.exec?.kind
+  const family = RUNNERS[FAMILY[profile?.family]]
+  if ((kind !== "image" && kind !== "compose") || !family) return null
+  const prefix = typeof profile.exec.prefix === "string" ? profile.exec.prefix : ""
+  for (const seg of segments(command)) {
+    if (!family.test(seg)) continue
+    const where = `this project runs its tooling in a container (exec.kind ${kind}); on the host it runs with the host's binaries and a different set of dependencies.`
+    if (INSTALLS.test(seg)) {
+      return `${where} Install with the profile's command${install ? `: ${install}` : `, through ${prefix}`}.`
+    }
+    return `${where} Run the tests with bash $DEV_SKILLS_LIB/test.sh (--scoped <name> for one file), or run the command after the profile's prefix: ${prefix} <command>`
   }
   return null
 }
@@ -320,7 +421,8 @@ export function check(event, cwd, callHistory) {
 
   // 8. Refuse forbidden bash operations
   if (tool !== "bash") return undefined
-  const reason = reasonToRefuse(input.command, baseBranches(cwd), currentBranch(cwd))
+  const reason = reasonToRefuse(input.command, baseBranches(cwd), currentBranch(cwd)) ??
+    reasonToRefuseRun(input.command, readProfile(cwd))
   return reason ? refuse(reason) : undefined
 }
 

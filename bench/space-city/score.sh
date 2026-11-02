@@ -10,7 +10,11 @@
 #   - files changed outside the plan's Create:/Modify: paths;
 #   - steps ticked, commits, step branches, guard refusals, TEST PASS lines;
 #   - wall time per step and tokens, from the harness's own records.
-# Prints one markdown row and appends it to results.md.
+# The tests run in a copy of the target with the pinned commit's lock file and a
+# fresh install in the container, so a model that broke node_modules or the lock
+# file still gets its code scored; what it changed is read from the original.
+# Prints one markdown row and appends it to results.md (BENCH_RESULTS to change
+# where, /dev/null when re-scoring a run that already has its row).
 
 set -u
 
@@ -22,12 +26,20 @@ logs="${2:?usage: score.sh <target-dir> <logs-dir>}"
 . "$logs/meta.env"
 : "${harness:?meta.env has no harness}" "${harness_rev:?}" "${steps:?}" "${target:?}"
 IMAGE="node:lts-alpine"
-box() { docker run --rm -v "$proj":/app -w /app "$IMAGE" "$@"; }
+results="${BENCH_RESULTS:-$here/results.md}"
+
+# --- a copy to score in: the model's code, the pinned dependencies -------------
+copy="$(mktemp -d "${TMPDIR:-/tmp}/bench-score.XXXXXX")"
+trap 'rm -rf "$copy"' EXIT INT TERM
+rsync -a --exclude node_modules "$proj"/ "$copy"/ || { printf 'score: could not copy %s\n' "$proj" >&2; exit 1; }
+git -C "$copy" checkout -q "$target" -- package-lock.json
+box() { docker run --rm -v "$copy":/app -w /app "$IMAGE" "$@"; }
+box npm ci --no-audit --no-fund >"$logs/score-install.log" 2>&1 \
+  || { printf 'score: npm ci failed in the copy, see %s\n' "$logs/score-install.log" >&2; exit 1; }
 
 # --- the hidden tests, and the rest of the suite -----------------------------
-cp "$here"/acceptance/bench-*.test.ts "$proj/src/__tests__/"
+cp "$here"/acceptance/bench-*.test.ts "$copy/src/__tests__/"
 box npx vitest run --reporter=json --outputFile=/app/.bench-vitest.json >"$logs/score-vitest.log" 2>&1
-rm -f "$proj"/src/__tests__/bench-*.test.ts
 tests="$(node -e '
   let r; try { r = require(process.argv[1]) } catch { console.log("? ? ? ?"); process.exit() }
   const count = (f) => {
@@ -41,8 +53,7 @@ tests="$(node -e '
   const failing = other.flatMap((x) => x.assertionResults).filter((a) => a.status !== "passed").length
     + other.filter((x) => x.status === "failed" && x.assertionResults.length === 0).length
   console.log(count("bench-costs"), count("bench-funds"), count("bench-refund"), failing)
-' "$proj/.bench-vitest.json")"
-rm -f "$proj/.bench-vitest.json"
+' "$copy/.bench-vitest.json")"
 read -r acc1 acc2 acc3 failing <<EOF
 $tests
 EOF
@@ -60,8 +71,24 @@ outside="${outside# }"
 ticked="$(grep -cE '^[0-9]+\. \[x\]' "$proj/.tasks/funds.md" 2>/dev/null)" || ticked=0
 commits="$(git -C "$proj" rev-list --count "$target..HEAD")"
 branches="$(git -C "$proj" branch --list 'step/*' | wc -l | tr -d ' ')"
-refusals="$(cat "$logs"/step-*.jsonl 2>/dev/null | grep -o 'dev-guard refuses' | wc -l | tr -d ' ')"
-passes="$(cat "$logs"/step-*.jsonl 2>/dev/null | grep -o 'TEST PASS' | wc -l | tr -d ' ')"
+# One per tool result: Pi repeats a result's text in several events of one call,
+# so counting the text across every line counts each refusal four or five times.
+read -r refusals passes <<EOF
+$(node -e '
+  const fs = require("fs"), dir = process.argv[1]
+  let r = 0, p = 0
+  for (const f of fs.readdirSync(dir).filter((f) => /^step-\d+\.jsonl$/.test(f))) {
+    for (const l of fs.readFileSync(`${dir}/${f}`, "utf8").split("\n")) {
+      let e; try { e = JSON.parse(l) } catch { continue }
+      if (e.type !== "tool_execution_end") continue
+      const text = e.result?.content?.[0]?.text ?? ""
+      if (e.isError && text.startsWith("dev-guard refuses")) r++
+      if (text.startsWith("TEST PASS")) p++
+    }
+  }
+  console.log(r, p)
+' "$logs")
+EOF
 
 # --- time and tokens ----------------------------------------------------------
 seconds=0
@@ -94,4 +121,4 @@ tokens="$(node -e '
 ' "$logs" "$harness")"
 
 row="| $(date +%Y-%m-%d) | $harness@$harness_rev | $steps | $ticked | $acc1 | $acc2 | $acc3 | $failing | $tsc | ${outside:-none} | $commits / $branches | $refusals | $passes | $seconds | $tokens |"
-printf '%s\n' "$row" | tee -a "$here/results.md"
+printf '%s\n' "$row" | tee -a "$results"

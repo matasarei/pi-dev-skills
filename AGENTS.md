@@ -25,7 +25,8 @@ When developing, updating, or debugging skills in this repository:
 
 1. **Prompt & Script Edits**:
    - Skills live in `skills/<skill-name>/SKILL.md`.
-   - Reusable scripts live in `lib/<script>.sh`; the Pi extensions in `pi/` (`commands.js` registers the commands, `expand.js` runs a skill's `!` lines, `guard.js` is the guard); templates in `skills/dev-init/templates/`.
+   - Reusable scripts live in `lib/<script>.sh`; the Pi extensions in `pi/` (`commands.js` registers the commands and holds the step gate, `expand.js` runs a skill's `!` lines, `guard.js` is the guard, `edit.js` wraps Pi's edit tool); templates in `skills/dev-init/templates/`.
+   - **Where a gate lives**: a fact any harness can use is a `lib/*.sh` script (`step-start.sh` cuts the branch and prints `STOP` when it must not start); a rule that needs session state is in `pi/commands.js` (the step gate); a stateless rule on one tool call is in `pi/guard.js`. A decision code can make is not left to the prompt.
 2. **Invariants to Check**:
    - **Size cap**: Run `bash evals/skills/size.sh` — every `SKILL.md` must remain under 90 lines and 5,000 bytes (description under 200 chars).
    - **Lint**: Run `shellcheck --severity=warning lib/*.sh evals/*.sh evals/*/*.sh` — 0 warnings allowed.

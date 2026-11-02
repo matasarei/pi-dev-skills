@@ -36,14 +36,20 @@ bash bench/space-city/run.sh opencode     # stops with the reinstall command if 
 `--steps 1` (or `1-2`, `2-3`) runs part of the plan. Each step times out after 30 minutes
 (`BENCH_STEP_TIMEOUT`, in seconds), which counts as a step not done. Logs land in
 `bench/space-city/runs/` (git-ignored); the scored row is appended to [`results.md`](results.md).
-Re-score a finished run with `bash bench/space-city/score.sh <target-dir> <logs-dir>`.
+Re-score a finished run with `BENCH_RESULTS=/dev/null bash bench/space-city/score.sh <target-dir> <logs-dir>`
+(without it, the row is appended to `results.md` again).
 
 The run is headless: a skill that stops to ask ends its session, and the step counts as not done.
+A start the harness gates itself (a refused branch: `step-start.sh`'s `STOP`) never reaches the
+model; `meta.env` records that step's exit as 3.
 That holds for both harnesses alike.
 
 ## What a row says
 
-Read from the tree and the logs, never from what the model reported:
+Read from the tree and the logs, never from what the model reported. The tests run in a copy of
+the target with the pinned lock file and a fresh install in the container, so a model that broke
+`node_modules` still has its code scored. What it changed, the lock file included, is read from
+the original tree:
 
 - **Ticked** — steps marked `[x]` in the task file.
 - **Step 1 / 2 / 3** — hidden tests passing, per step. A file that does not load scores 0.

@@ -3,7 +3,9 @@
 //
 //   node pi-rpc.mjs <cwd> <model> <prompt> <events.jsonl> <stats.json> <timeout-seconds>
 //
-// Exits 0 when the agent finished, 2 on timeout, 1 when Pi itself failed.
+// Exits 0 when the agent finished, 2 on timeout, 3 when the command was gated
+// (it notified the user instead of starting the agent: a refused branch, a
+// manual plan), 1 when Pi itself failed.
 
 import { spawn } from "node:child_process"
 import { createWriteStream, writeFileSync } from "node:fs"
@@ -14,6 +16,7 @@ const events = createWriteStream(eventsFile)
 let started = false
 let finished = false
 let timedOut = false
+let gated = false
 let buf = ""
 
 const send = (msg) => pi.stdin.write(JSON.stringify(msg) + "\n")
@@ -49,6 +52,12 @@ pi.stdout.on("data", (d) => {
     let e
     try { e = JSON.parse(line) } catch { continue }
     if (e.type === "agent_start") started = true
+    // A command that stops before the model runs only notifies; nothing else follows.
+    if (e.type === "extension_ui_request" && e.method === "notify" && e.notifyType === "error" && !started && !finished) {
+      finished = true
+      gated = true
+      send({ type: "get_session_stats" })
+    }
     if (e.type === "agent_end" && started && !finished) {
       finished = true
       send({ type: "get_session_stats" })
@@ -56,7 +65,7 @@ pi.stdout.on("data", (d) => {
     if (e.type === "response" && e.command === "get_session_stats") {
       writeFileSync(statsFile, JSON.stringify(e.data ?? {}, null, 2))
       clearTimeout(timer)
-      quit(timedOut ? 2 : 0)
+      quit(timedOut ? 2 : gated ? 3 : 0)
     }
   }
 })
