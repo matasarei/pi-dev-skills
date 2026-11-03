@@ -294,6 +294,9 @@ expect("a dropped stream: not exit 1", r.code === 1 && r.line.finish === "droppe
 answer = (res) => { res.writeHead(500, { "content-type": "application/json" }); res.end('{"error":"no model loaded"}') }
 r = await runReplay([file, "1"])
 expect("a 500: not exit 1 with the reason", r.code === 1 && r.stderr.includes("500") && r.stderr.includes("no model loaded"), r)
+answer = (res) => { res.writeHead(500, { "content-type": "text/plain" }); res.write("out of memory"); setTimeout(() => res.destroy(), 50) }
+r = await runReplay([file, "1", "--limit", "5"])
+expect("a 500 that drops: waited for the limit", r.code === 1 && r.stderr.includes("500") && r.stderr.includes("out of memory"), r)
 answer = (res) => { stream(res); res.write(`data: ${JSON.stringify({ error: { message: "context is full" } })}\n\n`); res.end() }
 r = await runReplay([file, "1"])
 expect("an error in the stream: not exit 1 with the reason", r.code === 1 && r.stderr.includes("context is full"), r)

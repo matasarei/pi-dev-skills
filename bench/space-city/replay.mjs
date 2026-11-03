@@ -240,7 +240,8 @@ function send(baseUrl, body, { dir, loggedText, limit }) {
     if (res.statusCode !== 200) {
       let answer = ""
       res.on("data", (d) => { answer += d })
-      res.on("end", () => refuse(`the server answered ${res.statusCode}: ${answer.slice(0, 300)}`))
+      res.on("error", () => {}) // A dropped answer: close still says what came.
+      res.on("close", () => refuse(`the server answered ${res.statusCode}: ${answer.slice(0, 300)}`))
       return
     }
     res.setEncoding("utf8") // A multibyte character can straddle two chunks.
