@@ -8,6 +8,10 @@
 # writes itself and a mock that records every request show what the tool lists,
 # what it sends, what it records of the answer, and when it sends nothing.
 #
+# Where Pi is installed it also runs real Pi against the mock and replays every reply
+# of that run: each request, whole body, has to equal the one Pi sent. That part skips
+# where Pi isn't installed, which includes CI.
+#
 # Exits 0 when every case holds, 1 otherwise, naming each failure.
 
 set -u
@@ -18,8 +22,9 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT INT TERM
 
 cat > "$work/run.mjs" <<'JS'
-import { execFile } from "node:child_process"
+import { execFile, execFileSync, spawn } from "node:child_process"
 import { createServer } from "node:http"
+import { createInterface } from "node:readline"
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 const [root, work] = process.argv.slice(2)
 const tool = `${root}/bench/space-city/replay.mjs`
@@ -307,6 +312,56 @@ requests = []
 r = await replay([lmFile, "1"], home)
 expect("no lms: not sent with a warning", r.code === 0 && requests.length === 1 && r.stderr.includes("not checked"), r)
 setModels(models())
+
+// The same request as real Pi: a run with two calls in a reply, a failed call, a call with
+// no text, a dropped stream and its retry, a call cut off at the limit, and an answer.
+let hasPi = true
+try { execFileSync("pi", ["--version"], { stdio: "ignore" }) } catch { hasPi = false }
+if (!hasPi) console.log("replay: Pi is not installed; the comparison with real Pi is skipped")
+else {
+  const proj = `${work}/proj`
+  mkdirSync(proj)
+  writeFileSync(`${proj}/notes.txt`, "hello\n")
+  writeFileSync(`${agent}/settings.json`, JSON.stringify({ retry: { baseDelayMs: 50 } }))
+  const named = (index, id, name, args) => ({ index, id, type: "function", function: { name, arguments: args } })
+  const script = [
+    (res) => { stream(res); res.write(chunk({ role: "assistant", content: "Reading two:\n\n", tool_calls: [named(0, "p1", "read", '{"path":"notes.txt"}'), named(1, "p2", "read", '{"path":"nope.txt"}')] })); finished(res, "tool_calls") },
+    (res) => { stream(res); res.write(chunk({ role: "assistant", tool_calls: [named(0, "p3", "bash", '{"command":"echo hi"}')] })); finished(res, "tool_calls") },
+    (res) => { stream(res); res.write(chunk({ role: "assistant", content: "partial " })); setTimeout(() => res.destroy(), 50) },
+    (res) => { stream(res); res.write(chunk({ role: "assistant", content: "Cut: ", tool_calls: [named(0, "p4", "read", "")] })); finished(res, "length") },
+    (res) => { stream(res); res.write(chunk({ role: "assistant", content: "done" })); finished(res, "stop") },
+  ]
+  let at = 0
+  answer = (res) => script[Math.min(at++, script.length - 1)](res)
+  requests = []
+  const lines = []
+  await new Promise((resolve) => {
+    const pi = spawn("pi", ["--mode", "rpc", "--no-session", "--no-extensions", "--model", "mock/m"], { cwd: proj, env: { ...process.env, PI_CODING_AGENT_DIR: agent }, stdio: ["pipe", "pipe", "ignore"] })
+    const timer = setTimeout(() => { fails.push("real Pi: timed out after 60 s"); pi.kill() }, 60000)
+    pi.once("exit", () => { clearTimeout(timer); resolve() })
+    createInterface({ input: pi.stdout }).on("line", (line) => {
+      lines.push(line)
+      try { if (JSON.parse(line).type === "agent_settled") pi.kill() } catch {}
+    })
+    pi.stdin.write(JSON.stringify({ type: "prompt", message: "go" }) + "\n")
+  })
+  const piSent = requests.map((q) => q.body)
+  expect("real Pi did not play the whole script", piSent.length === script.length, piSent.length)
+  const piLog = `${work}/pi-step.jsonl`
+  writeFileSync(piLog, lines.join("\n") + "\n")
+  answer = null
+  for (const [i, body] of piSent.entries()) {
+    requests = []
+    const out = await replay([piLog, String(i + 1)])
+    expect(`real Pi, reply ${i + 1}: the replay failed`, out.code === 0, out)
+    const mine = requests[0]?.body
+    if (JSON.stringify(mine) !== JSON.stringify(body)) {
+      const fields = [...new Set([...Object.keys(body), ...Object.keys(mine ?? {})])].filter((k) => JSON.stringify(body[k]) !== JSON.stringify(mine?.[k]))
+      const at = (body.messages ?? []).findIndex((m, n) => JSON.stringify(m) !== JSON.stringify(mine?.messages?.[n]))
+      fails.push(`real Pi, reply ${i + 1}: differs in ${fields.join(",") || "field order"}${at >= 0 ? `; message ${at}: Pi ${JSON.stringify(body.messages[at])} replay ${JSON.stringify(mine?.messages?.[at])}` : ""}`)
+    }
+  }
+}
 
 server.close()
 for (const f of fails) console.log(`FAIL  ${f}`)
