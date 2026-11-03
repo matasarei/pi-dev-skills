@@ -34,7 +34,7 @@ fi
 cat > "$work/run.mjs" <<'JS'
 import { pathToFileURL } from "node:url"
 const [argsModule, piEdit] = process.argv.slice(2)
-const { repairEditArgs } = await import(pathToFileURL(argsModule).href)
+const { repairEditArgs, editArgsProblem } = await import(pathToFileURL(argsModule).href)
 const fails = []
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 const NL = String.fromCharCode(10), TAB = String.fromCharCode(9)
@@ -59,6 +59,17 @@ if (r.edits !== "not json at all") fails.push(`garbage was changed: ${JSON.strin
 // Not an object, or no edits: returned as given.
 if (repairEditArgs(null) !== null) fails.push("null was not returned as given")
 if (!same(repairEditArgs({ path: "f", oldText: "a", newText: "b" }), { path: "f", oldText: "a", newText: "b" })) fails.push("legacy oldText/newText changed")
+
+// What cannot be repaired is reported with its real error, for the model to fix. The bench's stray bracket:
+const stray = editArgsProblem?.({ path: "f", edits: '[{"oldText": "a", "newText": "b"}]}]' }) ?? ""
+if (!/^edits is not valid JSON: .*position \d+/.test(stray) || !stray.includes("Fix the JSON, or use write.")) fails.push(`the stray bracket is not reported with its JSON error: ${stray}`)
+if (!(editArgsProblem?.({ path: "f", edits: "not json at all" }) ?? "").startsWith("edits is not valid JSON:")) fails.push("garbage is not reported")
+// Valid JSON that is not edits at all is reported too, without calling it invalid.
+const num = editArgsProblem?.({ path: "f", edits: "5" }) ?? ""
+if (!num.startsWith("edits is not a list of edits:") || !num.includes("Fix the JSON, or use write.")) fails.push(`a number is not reported: ${num}`)
+// Everything the repair or Pi can use has no problem.
+for (const ok of [{ path: "f", edits: raw }, { path: "f", edits: '[{"oldText":"a","newText":"b"}]' }, { path: "f", edits: arr }, { path: "f", oldText: "a", newText: "b" }, { path: "f", edits: `{"oldText": "a${NL}b", "newText": "c"}` }, { path: "f", edits: "junk", oldText: "a", newText: "b" }, null])
+  if (editArgsProblem?.(ok) !== null) fails.push(`a usable shape was reported: ${JSON.stringify(ok)}`)
 
 if (piEdit) try {
   const { createEditToolDefinition } = await import(pathToFileURL(piEdit).href)
