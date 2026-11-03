@@ -42,6 +42,7 @@ Re-score a finished run with `BENCH_RESULTS=/dev/null bash bench/space-city/scor
 The run is headless: a skill that stops to ask ends its session, and the step counts as not done.
 A start the harness gates itself (a refused branch: `step-start.sh`'s `STOP`) never reaches the
 model; `meta.env` records that step's exit as 3.
+That holds for both harnesses alike.
 
 On Pi, a step that ends unticked gets one more session with `--continue`, the README's recovery
 for a stuck run, with its own timeout and its log in `step-<n>-retry1.jsonl`. It doesn't get one
@@ -49,7 +50,6 @@ when the start was gated, when Pi itself failed, or when an earlier step is the 
 `meta.env` records `step<n>_resumes`, and `step<n>_seconds` covers every attempt, so a run can
 take up to twice as long. `BENCH_RESUMES` sets the number; rows up to `pi@d028952` in
 `results.md` had none, and `BENCH_RESUMES=0` reproduces them.
-That holds for both harnesses alike.
 
 ## What a row says
 
