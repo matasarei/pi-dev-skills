@@ -11,7 +11,8 @@
 # A mismatch stops the run instead of recording a result against the wrong
 # thing. The target is a fresh clone with its remote removed, so nothing the
 # model does can reach GitHub. Each step is /dev-implement <plan> --step N in
-# a new session, as the README's /new rule says.
+# a new session, as the README's /new rule says. On Pi, a step left unticked gets
+# one more session with --continue (run-step.sh; BENCH_RESUMES sets how many).
 #
 # Logs go to bench/space-city/runs/<stamp>-<harness>/ (git-ignored); the
 # scored row is printed and appended to bench/space-city/results.md.
