@@ -87,6 +87,11 @@ await commands["dev-implement"].handler(".tasks/plan.md", ctx)
 if (sent.length !== 0) fails.push(`a refused branch still sent the block to the model`)
 if (!told.some(([m]) => m.includes("BRANCH refused"))) fails.push(`the user was not told the branch was refused: ${JSON.stringify(told)}`)
 if (git("branch --show-current") !== "main") fails.push(`a refused start moved HEAD to ${git("branch --show-current")}`)
+// Asked for a later step with an earlier one unfinished: the user is told which, and how to resume it.
+told.length = 0
+await commands["dev-implement"].handler(".tasks/plan.md --step 2", ctx)
+if (sent.length !== 0) fails.push("a refused later step still sent the block to the model")
+if (!told.some(([m]) => m.includes("Step 1 is not finished") && m.includes("--continue resumes it"))) fails.push(`the user was not told which step to resume: ${JSON.stringify(told)}`)
 git("checkout -q -- README.md")
 
 // A clean tree: the block is sent, and it already says where the step is.
