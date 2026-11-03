@@ -341,10 +341,16 @@ if (far[0] !== "2" || far[2]) fail("a third refusal 21 calls after the first end
 // A new prompt starts over: "try again" is not refused for what the last prompt did.
 call = load()
 await inTurn(times(4, reads(1)))
-call.handlers.agent_start?.()
+call.handlers.before_agent_start?.()
 const fresh = await inTurn(times(3, reads(1)))
-if (codes(fresh) !== "002") fail(`agent_start did not clear the call history: ${codes(fresh)}`)
-if (fresh[2][2]) fail("agent_start did not clear the refusals: the first refusal after it ended the run")
+if (codes(fresh) !== "002") fail(`a new prompt did not clear the call history: ${codes(fresh)}`)
+if (fresh[2][2]) fail("a new prompt did not clear the refusals: the first refusal after it ended the run")
+// A retry does not. Pi fires agent_start again for it, and a loop must not earn a clean slate from a dropped stream.
+call = load()
+await inTurn(times(4, reads(1)))
+call.handlers.agent_start?.()
+const retry = await inTurn([reads(1)])
+if (codes(retry) !== "2" || !retry[0][2]) fail(`a retry's agent_start cleared the loop: ${codes(retry)} stop ${retry[0][2]}`)
 process.exit(fails ? 1 : 0)
 JS
 

@@ -463,6 +463,8 @@ export default function devGuard(pi) {
   const fresh = () => ({ calls: [], refusals: [], count: 0 })
   let loop = fresh()
   // A new prompt starts over: "try again" is not refused for what the last prompt did.
-  pi.on("agent_start", () => { loop = fresh() })
+  // Not agent_start: Pi fires that for its own retries too, and a dropped stream
+  // must not wipe the count of a loop that is still going.
+  pi.on("before_agent_start", () => { loop = fresh() })
   pi.on("tool_call", async (event, ctx) => check(event, ctx?.cwd || process.cwd(), loop))
 }
