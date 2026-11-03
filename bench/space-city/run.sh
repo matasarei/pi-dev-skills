@@ -112,22 +112,20 @@ cp "$here/plan.md" "$proj/.tasks/funds.md"
   printf 'target=%s\nimage=%s\n' "$SPACE_CITY_SHA" "$(docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE" 2>/dev/null)"
 } > "$logs/meta.env"
 
-# --- the steps, one session each --------------------------------------------
+# --- the steps: one session each, and on Pi one more for a step left unticked -
 for n in $(seq "$first" "$last"); do
   printf 'bench: step %s ...\n' "$n"
-  t0="$(date +%s)"
   if [ "$harness" = pi ]; then
-    node "$here/pi-rpc.mjs" "$proj" "$MODEL" "/dev-implement .tasks/funds.md --step $n" \
-      "$logs/step-$n.jsonl" "$logs/step-$n.stats.json" "$STEP_TIMEOUT"
-    rc=$?
-  else
-    (cd "$proj" && perl -e 'alarm shift; exec @ARGV' "$STEP_TIMEOUT" \
-      opencode run --command dev-implement --format json -m "$MODEL" ".tasks/funds.md --step $n") \
-      >"$logs/step-$n.jsonl" 2>"$logs/step-$n.stderr"
-    rc=$?
-    sid="$(grep -o '"sessionID":"[^"]*"' "$logs/step-$n.jsonl" | head -1 | cut -d'"' -f4)"
-    [ -n "$sid" ] && opencode export "$sid" >"$logs/step-$n.export.json" 2>/dev/null
+    bash "$here/run-step.sh" "$proj" .tasks/funds.md "$n" "$MODEL" "$logs" "$STEP_TIMEOUT"
+    continue
   fi
+  t0="$(date +%s)"
+  (cd "$proj" && perl -e 'alarm shift; exec @ARGV' "$STEP_TIMEOUT" \
+    opencode run --command dev-implement --format json -m "$MODEL" ".tasks/funds.md --step $n") \
+    >"$logs/step-$n.jsonl" 2>"$logs/step-$n.stderr"
+  rc=$?
+  sid="$(grep -o '"sessionID":"[^"]*"' "$logs/step-$n.jsonl" | head -1 | cut -d'"' -f4)"
+  [ -n "$sid" ] && opencode export "$sid" >"$logs/step-$n.export.json" 2>/dev/null
   printf 'step%s_seconds=%s\nstep%s_exit=%s\n' "$n" "$(( $(date +%s) - t0 ))" "$n" "$rc" >> "$logs/meta.env"
 done
 
