@@ -15,6 +15,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { dirname, isAbsolute, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { description, expandSkill } from "./expand.js"
+import { idleProblem, isLocalUrl } from "./idle-timeout.js"
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const skills = join(root, "skills")
@@ -182,7 +183,9 @@ export default function devCommands(pi) {
   const exported = process.env.DEV_SKILLS_CONTEXT
   // The /dev-implement step this session is on, or null.
   let state = null
-  pi.on?.("session_start", () => { state = null })
+  // The idle timeout's warning, once a session: it's a setup problem, not a step's.
+  let warned = false
+  pi.on?.("session_start", () => { state = null; warned = false })
   pi.on?.("tool_call", (event, ctx) => gate(state, event, ctx?.cwd || process.cwd()))
   for (const name of skillNames()) {
     const file = join(skills, name, "SKILL.md")
@@ -191,6 +194,13 @@ export default function devCommands(pi) {
       handler: async (args, ctx) => {
         await ctx.waitForIdle()
         state = null
+        const settings = pi.getSettings?.()
+        const problem = settings && isLocalUrl(ctx.model?.baseUrl) ? idleProblem(settings.httpIdleTimeoutMs) : null
+        if (problem && !warned) {
+          warned = true
+          if (ctx.ui?.notify) ctx.ui.notify(`/${name}: ${problem}`, "warning")
+          else console.error(`/${name}: ${problem}`)
+        }
         const env = injectionEnv(ctx.model)
         const window = env.DEV_SKILLS_CONTEXT ?? exported
         if (window === undefined) delete process.env.DEV_SKILLS_CONTEXT

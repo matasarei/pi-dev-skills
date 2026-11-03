@@ -54,6 +54,7 @@ for token in \
   'What each window buys' \
   'contextWindow' \
   'models.example.json' \
+  'httpIdleTimeoutMs' \
   'pi/commands.js' \
   'pi/expand.js' \
   'pi/edit.js' \

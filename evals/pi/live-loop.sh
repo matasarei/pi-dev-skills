@@ -10,6 +10,13 @@
 # (it validates a call before the hook, and retries a dropped stream) cannot show
 # up there. A loop of edits that failed validation got past the breaker that way.
 #
+# It also pins what Pi 1.5.0 does with a tool call that goes silent, as one does on
+# LM Studio, which sends the arguments only when they are complete: past
+# httpIdleTimeoutMs the call drops as `terminated`, and below it the call arrives.
+# A call cut off at the output limit is refused, and the run goes on. The setting
+# in the README and in the bench's preflight rests on this, so a new pin re-tests it.
+# And that the warning in pi/commands.js sees what Pi really hands an extension.
+#
 # Skips when Pi is not installed, which includes CI.
 # Exits 0 when every case holds, 1 otherwise, naming each failure.
 
@@ -40,12 +47,29 @@ let script = []
 let served = 0
 const chunk = (delta, finish = null) => `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 1, model: "m", choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`
 const calls = { broken: ["edit", { path: "notes.txt", edits: '[{"oldText": "hello", "newText": "bye"}]}]' }], read: ["read", { path: "notes.txt" }] }
+// A tool call's name now and its arguments after a silence, or never: the output limit ends it.
+const SILENCE_MS = 3000
 const server = createServer((req, res) => {
   req.resume()
   req.on("end", () => {
     const step = script[Math.min(served, script.length - 1)]
     served++
     res.writeHead(200, { "content-type": "text/event-stream" })
+    if (step === "silent" || step === "cut") {
+      const named = { index: 0, id: `call${served}`, type: "function", function: { name: "read", arguments: "" } }
+      res.write(chunk({ role: "assistant", content: "Reading: ", tool_calls: [named] }))
+      if (step === "cut") {
+        res.write(chunk({}, "length"))
+        return res.end("data: [DONE]\n\n")
+      }
+      setTimeout(() => {
+        if (res.destroyed) return
+        res.write(chunk({ tool_calls: [{ index: 0, function: { arguments: JSON.stringify(calls.read[1]) } }] }))
+        res.write(chunk({}, "tool_calls"))
+        res.end("data: [DONE]\n\n")
+      }, SILENCE_MS)
+      return
+    }
     if (step === "drop") {
       res.write(chunk({ role: "assistant", content: "partial " }))
       setTimeout(() => res.destroy(), 50)
@@ -66,12 +90,13 @@ await new Promise((r) => server.listen(0, "127.0.0.1", r))
 writeFileSync(`${work}/agent/models.json`, JSON.stringify({ providers: { mock: { baseUrl: `http://127.0.0.1:${server.address().port}/v1`, api: "openai-completions", apiKey: "x", models: [{ id: "m", name: "m", input: ["text"], contextWindow: 32768, maxTokens: 1024 }] } } }))
 
 // One Pi process, one prompt per entry: what each prompt's run did, up to agent_settled.
-const session = (steps, prompts = ["go"], first = []) => new Promise((resolve) => {
+const session = (steps, prompts = ["go"], first = [], settings = {}) => new Promise((resolve) => {
   script = steps
   served = 0
+  writeFileSync(`${work}/agent/settings.json`, JSON.stringify(settings))
   const pi = spawn("pi", ["--mode", "rpc", "--no-session", "--no-extensions", ...first.flatMap((e) => ["-e", e]), "-e", `${root}/pi/guard.js`, "-e", `${root}/pi/edit.js`, "--model", "mock/m"], { cwd: proj, env: { ...process.env, PI_CODING_AGENT_DIR: `${work}/agent` }, stdio: ["pipe", "pipe", "ignore"] })
   const runs = []
-  const fresh = () => ({ tools: [], notes: [], aborted: null, retries: 0 })
+  const fresh = () => ({ tools: [], notes: [], aborted: null, retries: 0, stops: [] })
   let run = fresh()
   const send = () => pi.stdin.write(JSON.stringify({ type: "prompt", message: prompts[runs.length] }) + "\n")
   // Wait for it to go: a request still in flight would take a step of the next case's script.
@@ -83,6 +108,7 @@ const session = (steps, prompts = ["go"], first = []) => new Promise((resolve) =
     try { e = JSON.parse(line) } catch { return }
     if (e.type === "tool_execution_end") run.tools.push({ name: e.toolName, isError: e.isError, text: (e.result?.content || []).map((c) => c.text || "").join("") })
     if (e.type === "auto_retry_start") run.retries++
+    if (e.type === "message_end" && e.message?.role === "assistant") run.stops.push(e.message.errorMessage || e.message.stopReason)
     if (e.type === "extension_ui_request" && e.method === "notify") run.notes.push(e.message)
     if (e.type === "agent_settled") {
       run.aborted = e.aborted
@@ -135,13 +161,36 @@ expect("no retry happened", r.retries === 1, r.retries)
 expect("the count did not survive a retry", r.tools.length === 5 && refused(r.tools[4]) && r.tools[4].text.includes("This run stops here."), r.tools.map((t) => t.isError))
 expect("a new prompt did not start clean", second?.tools.length === 1 && !second.tools[0].isError, second?.tools)
 
+// Silence past the idle timeout: the call is lost as `terminated`, and Pi retries.
+;[r] = await session(["silent", "text"], ["go"], [], { httpIdleTimeoutMs: 1000 })
+expect("silence past the timeout was not `terminated`", r.stops[0] === "terminated", r.stops)
+expect("that drop was not retried", r.retries === 1 && r.tools.length === 0 && r.stops[1] === "stop", { retries: r.retries, tools: r.tools.length, stops: r.stops })
+
+// The same silence under a longer timeout: the call arrives and runs.
+;[r] = await session(["silent", "text"], ["go"], [], { httpIdleTimeoutMs: 10000 })
+expect("silence under the timeout did not deliver the call", r.retries === 0 && r.stops[0] === "toolUse" && r.tools.length === 1 && !r.tools[0].isError && r.tools[0].text === original, { retries: r.retries, stops: r.stops, tools: r.tools })
+
+// Cut off at the output limit: not run, not retried, and the model is told. The run goes on.
+;[r] = await session(["cut", "text"])
+expect("a call cut off at the limit was not refused", r.tools.length === 1 && r.tools[0].isError && r.tools[0].text.includes("Re-issue the tool call"), r.tools)
+expect("the run did not go on after the cut", r.retries === 0 && r.stops[0] === "length" && r.stops[1] === "stop" && r.aborted === false, { retries: r.retries, stops: r.stops, aborted: r.aborted })
+
+// The warning with what Pi really hands an extension: its model, with baseUrl, and its settings.
+const commandsExt = `${root}/pi/commands.js`
+;[r] = await session(["text"], ["/dev-init"], [commandsExt])
+expect("a /dev-* command on a local model with Pi's default was not warned", r.notes.some((n) => n.includes("httpIdleTimeoutMs") && n.includes("300 s")), r.notes)
+expect("the warned command did not run", r.stops[0] === "stop", r.stops)
+;[r] = await session(["text"], ["/dev-init"], [commandsExt], { httpIdleTimeoutMs: 1200000 })
+expect("a /dev-* command at the limit was warned", !r.notes.some((n) => n.includes("httpIdleTimeoutMs")), r.notes)
+expect("the command at the limit did not run", r.stops[0] === "stop", r.stops)
+
 server.close()
 for (const f of fails) console.log(`FAIL  ${f}`)
 process.exit(fails.length ? 1 : 0)
 JS
 
 if node "$work/run.mjs" "$root" "$work"; then
-  printf 'live-loop: real Pi stops every loop it should, and no other run\n'
+  printf 'live-loop: real Pi stops every loop it should and no other run, and a silent call follows the idle timeout\n'
   exit 0
 fi
 printf 'live-loop: case(s) failed\n' >&2

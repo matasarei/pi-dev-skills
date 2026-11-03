@@ -75,6 +75,14 @@ pi --model lmstudio/prism-ml/bonsai-27b
 * **Why reasoning OFF?** In agent loops local models spend 30–90 seconds generating `<think>` tokens before *every single tool call*, often simulating imaginary tool output instead of calling the tool. `samplingParams` sends `"reasoning_effort": "none"` with every request, and the entries leave Pi's own `reasoning` flag off, so no thinking level switches it back on unseen. Latency drops to 1–3 seconds and real tool output grounds the model.
 * **`temperature: 0`**: zero temperature is required for deterministic code reviews and consistent tool use.
 
+Then give Pi an idle timeout that outlasts a long tool call, in `~/.pi/agent/settings.json`:
+
+```json
+{ "httpIdleTimeoutMs": 1200000 }
+```
+
+* **Why 20 minutes?** LM Studio sends nothing while a model writes a tool call's arguments, so a long `edit` or `write` is minutes of silence, and Pi's 5-minute default drops it as `terminated`. A retry at `temperature: 0` can write the same long call again. A full 16k reply takes about 15 minutes at worst, so 20 minutes clears it and still ends a real hang. `/dev-*` commands warn once a session when a local model runs below it, and the bench refuses to start.
+
 ### 2. Nothing else to configure
 
 Pi has no plan mode and no per-tool permission prompts: tools run with your own OS permissions, `/dev-plan` writes `.tasks/` like any other file, and `/tmp` needs no allow-list. The guard below is what stands between a model and a destructive git command.
@@ -243,6 +251,7 @@ writes the body to `.devskills/pr-body.md` and hands you the URL.
 ## Troubleshooting
 
 * **`/dev-*` commands missing**: `pi list` should show this checkout among the packages. Run `/reload` after a change to `pi/*.js`, and start with `pi --verbose` to see extension errors at startup.
+* **A reply ends with `terminated` after about 5 minutes**: Pi's idle timeout dropped a long tool call while the server was silent. Set `httpIdleTimeoutMs` as in [the model setup](#1-model-configuration) and restart Pi.
 * **Tool calls truncate or loop**: Server context window is below 64k. Increase context length in LM Studio or set `OLLAMA_CONTEXT_LENGTH=65536`.
 * **Model stuck in a retry loop or context bloated**: Repeated failed tool calls (e.g. failing edits or syntax errors) can fill the context with identical failure traces, trapping `temperature: 0` models in repetitive retry loops. The guard ends such a run with `This run stops here.`, in its last refusal or, for calls that fail validation, in a notification; the step is left unfinished, with its uncommitted work still in the tree, and a later step's `BRANCH refused` names it. Check the tree before you resume:
   * **Fresh Session (`--continue`)**: Run `/new` for a fresh session, then `/dev-implement .tasks/<task>.md --continue`. Progress is tracked on disk in `.tasks/` and git branch commits, instantly clearing out thousands of poisoned context tokens.
