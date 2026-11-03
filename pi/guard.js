@@ -21,7 +21,9 @@
 // most — an unescaped backslash in a grep pattern, a file passed to find as its
 // directory, a timeout in milliseconds where Pi wants seconds, line endings
 // that differ from the file — refuses to read a directory, and breaks a loop of
-// identical tool calls. Repairs change event.input in place, which Pi runs.
+// tool calls: three identical in a row, or a short cycle of them. The third such
+// refusal within 20 calls ends the run. Repairs change event.input in place,
+// which Pi runs.
 //
 // Quoted text is blanked first, so a commit message may mention a flag.
 // Everything else runs — gh pr create and gh pr ready included, which /dev-pr
