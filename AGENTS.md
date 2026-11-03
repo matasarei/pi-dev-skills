@@ -25,7 +25,7 @@ When developing, updating, or debugging skills in this repository:
 
 1. **Prompt & Script Edits**:
    - Skills live in `skills/<skill-name>/SKILL.md`.
-   - Reusable scripts live in `lib/<script>.sh`; the Pi extensions in `pi/` (`commands.js` registers the commands and holds the step gate, `expand.js` runs a skill's `!` lines, `guard.js` is the guard, `edit.js` wraps Pi's edit tool); templates in `skills/dev-init/templates/`.
+   - Reusable scripts live in `lib/<script>.sh`; the Pi extensions in `pi/` (`commands.js` registers the commands and holds the step gate, `expand.js` runs a skill's `!` lines, `guard.js` is the guard, `edit.js` wraps Pi's edit tool, and `idle-timeout.js`, not an extension itself, says whether Pi's idle timeout is enough); templates in `skills/dev-init/templates/`.
    - **Where a gate lives**: a fact any harness can use is a `lib/*.sh` script (`step-start.sh` cuts the branch and prints `STOP` when it must not start); a rule that needs session state is in `pi/commands.js` (the step gate); a rule on one tool call, or on the recent run of calls (the loop breaker), is in `pi/guard.js`. A decision code can make is not left to the prompt.
 2. **Invariants to Check**:
    - **Size cap**: Run `bash evals/skills/size.sh` — every `SKILL.md` must remain under 90 lines and 5,000 bytes (description under 200 chars).
@@ -57,4 +57,4 @@ When developing, updating, or debugging skills in this repository:
 - **Step cycle:** `/dev-init` → `/dev-plan` → `/dev-implement` → `/dev-review` → `/dev-pr`. Each step runs on a stacked branch (`step/<slug>-<n>`).
 - **Manual cycle:** `/dev-plan-manual` → you write the code and commit it → `/dev-review` → you fix it by hand. The plan carries `**Mode:** manual`; `/dev-implement` refuses one.
 - **Learned facts** persist across sessions in `.devskills/learned.md`.
-- **Model config:** `models.example.json` sends `reasoning_effort: none` and `temperature: 0` with every request, to avoid local model latency in agent loops. Copy it to `~/.pi/agent/models.json`.
+- **Model config:** `models.example.json` sends `reasoning_effort: none` and `temperature: 0` with every request, to avoid local model latency in agent loops. Copy it to `~/.pi/agent/models.json`, and set `httpIdleTimeoutMs` to 1200000 in `~/.pi/agent/settings.json`: a local server sends nothing while a model writes a tool call, and Pi's 5-minute default drops long ones.

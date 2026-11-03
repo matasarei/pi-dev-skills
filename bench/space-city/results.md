@@ -1,6 +1,6 @@
 # Results
 
-One row per run of `run.sh`, appended by `score.sh`. See the README for what each column means.
+One row per run of `run.sh`, appended by `score.sh`. See the README for what each column means. Every row up to note ⁷ ran with Pi's 300 s idle timeout, which dropped long tool calls in 4 of the 8 runs.
 
 | Date | Harness | Steps | Ticked | Step 1 /14 | Step 2 /7 | Step 3 /5 | Other failing | tsc | Outside the plan | Commits / step branches | Guard refusals | `TEST PASS` | Seconds | Tokens in/out |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
