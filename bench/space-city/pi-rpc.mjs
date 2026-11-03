@@ -58,7 +58,8 @@ pi.stdout.on("data", (d) => {
       gated = true
       send({ type: "get_session_stats" })
     }
-    if (e.type === "agent_end" && started && !finished) {
+    // Not agent_end: Pi ends the agent run on a dropped stream, then retries it.
+    if (e.type === "agent_settled" && started && !finished) {
       finished = true
       send({ type: "get_session_stats" })
     }
