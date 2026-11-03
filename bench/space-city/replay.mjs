@@ -211,7 +211,7 @@ function send(baseUrl, body, { dir, loggedText, limit }) {
       argsValidJson: args.length ? args.every(valid) : null,
       lines: lines.length,
       distinctLines: new Set(lines).size,
-      sameStartAsLog: loggedText ? text.slice(0, size) === loggedText.slice(0, size) : null,
+      sameStartAsLog: loggedText ? size > 0 && text.slice(0, size) === loggedText.slice(0, size) : null,
       dir,
     }))
     if (why) console.error(`replay: ${why}`)

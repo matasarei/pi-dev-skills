@@ -234,6 +234,7 @@ answer = (res) => {
 r = await runReplay([file, "1"])
 expect("two calls: the line", r.line.tool === "read,bash" && r.line.argsValidJson === false && r.line.argsChars === 18, r.line)
 expect("two calls: args.txt", read(r.dir, "args.txt") === '{"path":"x"}\n{"comm\n', read(r.dir, "args.txt"))
+expect("no text where the log had some counted as the same start", r.line.sameStartAsLog === false, r.line)
 
 // A reply that repeats itself: the lines show it, escaped newlines in arguments counted too.
 answer = (res) => {
