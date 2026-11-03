@@ -9,6 +9,12 @@
 // DEV_SKILLS_LIB points there, and DEV_SKILLS_CONTEXT carries the active
 // model's window, which profile.sh and step-budget.sh size steps against.
 // Both are also set on process.env, which the model's own bash calls inherit.
+//
+// During a command it also stops a reply that repeats itself (pi/runaway.js), which
+// would otherwise run to the output limit and end the session. Pi leaves the stopped
+// reply out of the next request, so the model gets a nudge and a clean context. It's
+// off for the person's own prompts: the nudge asks for a tool call, which only makes
+// sense in a step.
 
 import { execFileSync } from "node:child_process"
 import { existsSync, readdirSync, readFileSync } from "node:fs"
@@ -16,6 +22,7 @@ import { dirname, isAbsolute, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { description, expandSkill } from "./expand.js"
 import { idleProblem, isLocalUrl } from "./idle-timeout.js"
+import { createWatch, NUDGE, STOP_AT } from "./runaway.js"
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const skills = join(root, "skills")
@@ -185,8 +192,56 @@ export default function devCommands(pi) {
   let state = null
   // The idle timeout's warning, once a session: it's a setup problem, not a step's.
   let warned = false
-  pi.on?.("session_start", () => { state = null; warned = false })
+  // A runaway reply. armed: a command's message is about to start a run. watching: this
+  // run came from a command or a nudge. nudged: the next run is the nudge's. stopped:
+  // this rule aborted the reply, as opposed to a person pressing Esc.
+  let armed = false
+  let watching = false
+  let nudged = false
+  let stopped = false
+  let runaways = 0
+  let watch = null
+  const say = (ctx, msg, level) => {
+    if (ctx?.ui?.notify) ctx.ui.notify(msg, level)
+    else console.error(msg)
+  }
+  pi.on?.("session_start", () => {
+    state = null
+    warned = false
+    armed = watching = nudged = stopped = false
+    runaways = 0
+    watch = null
+  })
   pi.on?.("tool_call", (event, ctx) => gate(state, event, ctx?.cwd || process.cwd()))
+  pi.on?.("before_agent_start", () => {
+    if (armed) {
+      armed = false
+      watching = true
+      runaways = 0
+    } else if (nudged) nudged = false
+    else watching = false
+  })
+  pi.on?.("message_start", (event) => {
+    if (event.message?.role === "assistant") watch = createWatch()
+  })
+  pi.on?.("message_update", (event, ctx) => {
+    const update = event.assistantMessageEvent
+    if (!watching || !watch || update?.type !== "text_delta" || !watch.add(update.delta)) return
+    runaways++
+    stopped = true
+    say(ctx, `A reply started repeating itself, so it was stopped (${runaways} of ${STOP_AT}).`, "warning")
+    ctx.abort()
+  })
+  pi.on?.("agent_settled", (_event, ctx) => {
+    if (!stopped) return
+    stopped = false
+    if (runaways >= STOP_AT) {
+      say(ctx, "Replies keep repeating themselves. This run stops here.", "error")
+      return
+    }
+    nudged = true
+    pi.sendUserMessage(NUDGE)
+  })
   for (const name of skillNames()) {
     const file = join(skills, name, "SKILL.md")
     pi.registerCommand(name, {
@@ -224,6 +279,7 @@ export default function devCommands(pi) {
             state = { ...at, taskFile, startHead: git(ctx.cwd, "rev-parse", "HEAD"), refusals: 0 }
           }
         }
+        armed = true
         pi.sendUserMessage(block)
       },
     })
