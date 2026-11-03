@@ -12,7 +12,7 @@ the same thing, and a difference between two rows is the harness, not the task.
 | Task | [`plan.md`](plan.md) — 3 steps: a cost table, funds charged on placement, half refunded on clearing | copied in as `.tasks/funds.md` |
 | Score | [`acceptance/`](acceptance) — 26 hidden tests, one file per step | copied in after the run, removed again |
 | Model | `lmstudio/prism-ml/bonsai-27b`, loaded at a 131072 window | `lms ps` |
-| Pi side | Pi 1.4.0 with this checkout; the commit is recorded per row | `pi --version`, `pi list` |
+| Pi side | Pi 1.5.0 with this checkout; the commit is recorded per row | `pi --version`, `pi list` |
 | OpenCode side | OpenCode 1.18.20 with opencode-skills at `9365f31`, the commit this repository was copied from | the installed files compared with that commit |
 
 Not pinned, so recorded instead: the `node:lts-alpine` image the profile runs tests in (its

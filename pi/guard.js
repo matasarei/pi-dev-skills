@@ -22,8 +22,9 @@
 // directory, a timeout in milliseconds where Pi wants seconds, line endings
 // that differ from the file — refuses to read a directory, and breaks a loop of
 // tool calls: three identical in a row, or a short cycle of them. The third such
-// refusal within 20 calls ends the run. Repairs change event.input in place,
-// which Pi runs.
+// repeat within 20 calls ends the run. Calls that fail Pi's validation count too,
+// though they never reach this hook: checkRejected sees them after the fact. Repairs
+// change event.input in place, which Pi runs.
 //
 // Quoted text is blanked first, so a commit message may mention a flag.
 // Everything else runs — gh pr create and gh pr ready included, which /dev-pr
@@ -323,6 +324,31 @@ export function isShortCycle(callHistory) {
   return counts.size <= LOOP_DISTINCT && [...counts.values()].every((n) => n >= 2)
 }
 
+// Counts one repeat. True when it is the one that ends the run: a model that keeps
+// looping keeps ignoring what it is told, so the third within the limit stops it.
+function countRepeat(loop) {
+  loop.refusals = loop.refusals.filter((at) => loop.count - at <= LOOP_STOP_WITHIN)
+  loop.refusals.push(loop.count)
+  return loop.refusals.length >= LOOP_STOP_AT
+}
+
+// A call Pi rejected before the hook: it fails validation first, so tool_call and
+// tool_result never fire for it, and only the execution events show it happened.
+// It has already failed, so there is nothing to refuse: it goes in the same history
+// and count, and when the count says stop, this ends the run from here.
+export function checkRejected(event, ctx, loop) {
+  const call = loop.started.get(event?.toolCallId)
+  loop.started.delete(event?.toolCallId)
+  if (!call || !event.isError) return
+  loop.count++
+  const inARow = checkConsecutiveCalls(loop.calls, call.tool, call.args)
+  if (inARow < 3 && !isShortCycle(loop.calls)) return
+  if (countRepeat(loop)) {
+    ctx?.ui?.notify?.(`dev-guard: ${call.tool} calls keep failing before they run. This run stops here.`, "error")
+    ctx?.abort?.()
+  }
+}
+
 // Make text use the file's line endings: CRLF when the file has them, LF otherwise.
 function matchLineEndings(text, crlf) {
   if (typeof text !== "string") return text
@@ -344,17 +370,15 @@ function fileText(path, cwd) {
 // One tool call, judged: { block: true, reason } to refuse it, undefined to let
 // it run. event.input may be repaired in place first.
 export function check(event, cwd, loop) {
+  loop.started.delete(event?.toolCallId) // it reached the hook: counted here, not as rejected
   const tool = event?.toolName
   const input = event?.input
   if (!input || typeof input !== "object") return undefined
   const refuse = (reason) => ({ block: true, reason: REFUSES + reason })
   const callHistory = loop.calls
   loop.count++
-  // A model that keeps looping keeps ignoring the refusal, so the third ends the run.
   const refuseRepeat = (reason) => {
-    loop.refusals = loop.refusals.filter((at) => loop.count - at <= LOOP_STOP_WITHIN)
-    loop.refusals.push(loop.count)
-    if (loop.refusals.length < LOOP_STOP_AT) return refuse(reason)
+    if (!countRepeat(loop)) return refuse(reason)
     return { ...refuse(`${reason} This run stops here.`), terminate: true }
   }
 
@@ -460,11 +484,13 @@ export function check(event, cwd, loop) {
 
 export default function devGuard(pi) {
   // Per instance, not per module load: another instance's calls must not count.
-  const fresh = () => ({ calls: [], refusals: [], count: 0 })
+  const fresh = () => ({ calls: [], refusals: [], count: 0, started: new Map() })
   let loop = fresh()
   // A new prompt starts over: "try again" is not refused for what the last prompt did.
   // Not agent_start: Pi fires that for its own retries too, and a dropped stream
   // must not wipe the count of a loop that is still going.
   pi.on("before_agent_start", () => { loop = fresh() })
   pi.on("tool_call", async (event, ctx) => check(event, ctx?.cwd || process.cwd(), loop))
+  pi.on("tool_execution_start", (event) => { loop.started.set(event.toolCallId, { tool: event.toolName, args: event.args }) })
+  pi.on("tool_execution_end", (event, ctx) => checkRejected(event, ctx, loop))
 }

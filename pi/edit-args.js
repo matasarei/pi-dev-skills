@@ -36,7 +36,7 @@ function escapeControlInStrings(text) {
 
 // The arguments with a string `edits` parsed whenever it reads as JSON — as it
 // is, or with the raw control characters in its strings escaped; anything else
-// is returned as given, for Pi's shim and its validation.
+// is returned as given, for Pi's shim and editArgsProblem.
 export function repairEditArgs(args) {
   if (!args || typeof args !== "object" || typeof args.edits !== "string") return args
   for (const text of [args.edits, escapeControlInStrings(args.edits)]) {
@@ -44,8 +44,24 @@ export function repairEditArgs(args) {
       const parsed = JSON.parse(text)
       if (parsed && typeof parsed === "object") return { ...args, edits: parsed }
     } catch {
-      // try the lenient read, then give up: Pi's validation reports it
+      // try the lenient read, then give up: editArgsProblem reports it
     }
   }
   return args
+}
+
+// What is wrong with a string `edits` that cannot be repaired, or null when there
+// is nothing to report. Pi's validation would say "edits.0: expected object, got
+// string", which names no real problem, and the bench's model sent one such call
+// 179 times. Legacy oldText/newText is fine: Pi's shim uses those and drops `edits`.
+export function editArgsProblem(args) {
+  const repaired = repairEditArgs(args)
+  if (!repaired || typeof repaired.edits !== "string") return null
+  if (typeof repaired.oldText === "string" && typeof repaired.newText === "string") return null
+  try {
+    JSON.parse(escapeControlInStrings(repaired.edits)) // the repair copes with those, so they are not the problem
+  } catch (e) {
+    return `edits is not valid JSON: ${e.message}. Fix the JSON, or use write.`
+  }
+  return `edits is not a list of edits: it reads as ${repaired.edits.slice(0, 40)}. Fix the JSON, or use write.`
 }

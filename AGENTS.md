@@ -15,7 +15,7 @@ Development skills for Pi Coding Agent, engineered for local ~30B models. These 
 | Build | none — no build system; shell scripts, SKILL.md files and two plain-JS Pi extensions |
 | Run | none — not a runtime application; the skills run as Pi commands |
 
-Commands run on the host system (no container). Ensure you have `gh`, `node` (the guard and expander suites load the extensions), `shellcheck`, Pi 1.4.0, and a model server at 64k or 128k; Docker is not needed here.
+Commands run on the host system (no container). Ensure you have `gh`, `node` (the guard and expander suites load the extensions), `shellcheck`, Pi 1.5.0, and a model server at 64k or 128k; Docker is not needed here.
 
 `pi/commands.js` passes the active model's `contextWindow` to `profile.sh` as `DEV_SKILLS_CONTEXT`, and `step-budget.sh` sizes each step against it: 1,572 lines at 128k, 786 at 64k, 393 at 32k. A 32k window does not carry implement → review → fix → pr in one context — see **What each window buys** in the README.
 
@@ -35,6 +35,7 @@ When developing, updating, or debugging skills in this repository:
 3. **Evals**:
    - Every file under `lib/` must have test cases in `evals/lib/`: `<script>.sh` for a shell script, and `steps.sh` for `steps.awk`. The guard has `evals/guard/cases.sh`; the expander is covered by `evals/skills/injected.sh`.
    - A suite that reads `DEV_SKILLS_CONTEXT` or `PI_MODEL` unsets it at the top: run from inside Pi, it would inherit the session's.
+   - `evals/guard/cases.sh` calls the guard's handlers directly, so it skips what Pi does first. A rule that depends on Pi's order of events (validation before the hook, a retry after a dropped stream) also needs a case in `evals/pi/live-loop.sh`, which runs real Pi against a mock provider and skips in CI, where Pi isn't installed.
    - Run the target test during iteration (`bash evals/lib/<script>.sh`), then run the full suite: `bash evals/run-all.sh` (every suite must pass; it prints the count itself).
 4. **No sync step**: `pi install` of a local directory loads it from the checkout. A changed `SKILL.md` or `lib/` script applies on the next command; a changed `pi/*.js` after `/reload`.
 5. **Verify Loaded in Pi**:

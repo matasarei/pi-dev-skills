@@ -30,8 +30,8 @@ These skills are optimized for ~30B parameter local coding models:
 ## Installation & Setup
 
 ```bash
-# Pi 1.4.0, the version this package is tested with
-npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.4.0
+# Pi 1.5.0, the version this package is tested with
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.5.0
 
 git clone https://github.com/matasarei/pi-dev-skills.git
 pi install ./pi-dev-skills        # loaded from the checkout, not copied
@@ -40,7 +40,7 @@ pi install ./pi-dev-skills        # loaded from the checkout, not copied
 `pi install` with a local directory records its path in `~/.pi/agent/settings.json` and loads the package from there. There is nothing to sync after an edit: a changed `SKILL.md` or `lib/` script applies on the next command, and a changed `pi/*.js` after `/reload`. Add `-l` to install it for one project only (written to `.pi/settings.json`, loaded once the project is trusted).
 
 ### Requirements
-* **Pi 1.4.0** (Node.js 22.19 or newer).
+* **Pi 1.5.0** (Node.js 22.19 or newer).
 * **Git** and **Bash** (macOS, Linux, or WSL on Windows. Native Windows Git Bash is unsupported).
 * **GitHub CLI (`gh`)** for pull request skills (`gh auth login`).
 * **Docker** (recommended — skills run tests inside project containers by default).
@@ -225,7 +225,7 @@ writes the body to `.devskills/pr-body.md` and hands you the URL.
 
 ## Mechanics & Guardrails
 
-* **The Guard (`pi/guard.js`)**: A Pi extension on the `tool_call` event that blocks dangerous actions before they run: force pushes, amended commits, skipped git hooks, pushes to `main`/`master`, commits on the base branch, and unauthorized `gh pr merge`. It refuses deleting `node_modules`, `vendor` or a lock file in any project, and, when the profile runs in a container (`exec.kind` `image` or `compose`), the project's test runner or installer run bare on the host — naming `test.sh`, the profile's `install` or its `exec.prefix` instead. It also repairs the argument mistakes local models make most (an unescaped backslash in a grep pattern, a file passed to `find` as its directory, a bash timeout in milliseconds where Pi wants seconds, line endings that differ from the file) and breaks loops of tool calls: the same call three times in a row, or the last 12 calls being 3 or fewer different calls, each made more than once. Those two refusals tell the model to stop and say what blocks it. The third refusal for repeating within 20 calls ends the run, and refusals of a repeated edit count toward it too. Verified by the case table in `evals/guard/cases.sh`.
+* **The Guard (`pi/guard.js`)**: A Pi extension on the `tool_call` event that blocks dangerous actions before they run: force pushes, amended commits, skipped git hooks, pushes to `main`/`master`, commits on the base branch, and unauthorized `gh pr merge`. It refuses deleting `node_modules`, `vendor` or a lock file in any project, and, when the profile runs in a container (`exec.kind` `image` or `compose`), the project's test runner or installer run bare on the host — naming `test.sh`, the profile's `install` or its `exec.prefix` instead. It also repairs the argument mistakes local models make most (an unescaped backslash in a grep pattern, a file passed to `find` as its directory, a bash timeout in milliseconds where Pi wants seconds, line endings that differ from the file) and breaks loops of tool calls: the same call three times in a row, or the last 12 calls being 3 or fewer different calls, each made more than once. Those two refusals tell the model to stop and say what blocks it. The third refusal for repeating within 20 calls ends the run, and refusals of a repeated edit count toward it too. A call that fails validation never reaches the guard, because Pi rejects it first, so the guard counts those after the fact, toward the same limit: 5 identical ones in a row, or a short cycle of them with other calls, abort the run and notify you, without the model getting a turn to report. Verified by the case table in `evals/guard/cases.sh`, and through real Pi by `evals/pi/live-loop.sh`, which skips when Pi isn't installed.
 * **Edit arguments (`pi/edit.js`)**: Pi's own `edit` tool, re-registered with one more repair in front of Pi's argument shim: an `edits` sent as a JSON string with raw newlines in its values — which `JSON.parse` rejects, so Pi refused the call — is parsed. Verified by `evals/pi/edit.sh`.
 * **Mechanical Evidence Verification**: `lib/findings-check.sh` validates quoted code against current files on disk, discarding hallucinated findings.
 * **Cross-Stack Route Verification**: `lib/http-check.sh` verifies HTTP routes and responses across tech stacks (validating connection status, HTTP codes, auth drops to login routes/inputs, empty responses / white screens of death, English framework error screens, required domain content assertions, and crash/traceback signatures across PHP, Python, Node, Java, Go, Ruby, and SQL engines).
@@ -244,7 +244,7 @@ writes the body to `.devskills/pr-body.md` and hands you the URL.
 
 * **`/dev-*` commands missing**: `pi list` should show this checkout among the packages. Run `/reload` after a change to `pi/*.js`, and start with `pi --verbose` to see extension errors at startup.
 * **Tool calls truncate or loop**: Server context window is below 64k. Increase context length in LM Studio or set `OLLAMA_CONTEXT_LENGTH=65536`.
-* **Model stuck in a retry loop or context bloated**: Repeated failed tool calls (e.g. failing edits or syntax errors) can fill the context with identical failure traces, trapping `temperature: 0` models in repetitive retry loops. The guard ends such a run with `This run stops here.` in its last refusal; the step is left unfinished, so check the tree before you resume:
+* **Model stuck in a retry loop or context bloated**: Repeated failed tool calls (e.g. failing edits or syntax errors) can fill the context with identical failure traces, trapping `temperature: 0` models in repetitive retry loops. The guard ends such a run with `This run stops here.`, in its last refusal or, for calls that fail validation, in a notification; the step is left unfinished, so check the tree before you resume:
   * **Fresh Session (`--continue`)**: Run `/new` for a fresh session, then `/dev-implement .tasks/<task>.md --continue`. Progress is tracked on disk in `.tasks/` and git branch commits, instantly clearing out thousands of poisoned context tokens.
   * **`/compact`**: If staying in the active session, run `/compact` to prune verbose tool error outputs while retaining high-level instructions and decisions, then resume with `/dev-implement .tasks/<task>.md --continue`.
 * **Guard blocked a command**: The guard refused a destructive git command (force-push, commit amend, or base branch push). Commit changes normally and use `/dev-pr`.
