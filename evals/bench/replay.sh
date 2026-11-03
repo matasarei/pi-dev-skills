@@ -290,6 +290,15 @@ answer = (res) => {
 r = await runReplay([file, "1"])
 expect("a dropped stream: not exit 1", r.code === 1 && r.line.finish === "dropped" && r.stderr.includes("before it finished"), r)
 
+// Dropped after the headers, before any chunk: still a dropped stream, not a failed request.
+answer = (res) => {
+  stream(res)
+  res.flushHeaders()
+  setTimeout(() => res.destroy(), 50)
+}
+r = await runReplay([file, "1"])
+expect("dropped before the first chunk: not reported as dropped", r.code === 1 && r.line.finish === "dropped" && r.line.firstByteSeconds === null, r)
+
 // The server saying no: exit 1, and it says what.
 answer = (res) => { res.writeHead(500, { "content-type": "application/json" }); res.end('{"error":"no model loaded"}') }
 r = await runReplay([file, "1"])
