@@ -39,6 +39,9 @@ import { join, dirname, resolve } from "node:path"
 
 const SEG = "[^|;&]*" // the rest of one command in a pipeline or chain
 const REFUSES = "dev-guard refuses: "
+const LOOP_WINDOW = 12
+const LOOP_DISTINCT = 3
+const LOOP_ADVICE = "Running them again will not change the result. Stop calling tools and say in your answer what blocks you."
 
 // A branch name is a literal here, not a pattern: release.1 must not match release01.
 const literal = (s) => s.replace(/[^A-Za-z0-9_/-]/g, "\\$&")
@@ -304,6 +307,18 @@ export function checkConsecutiveCalls(callHistory, tool, args) {
   return count
 }
 
+// A short cycle: the newest calls are only a few different calls, each made more
+// than once. It catches what an in-a-row count cannot, a loop with something
+// between its repeats. A call made once in the window has not repeated, so
+// answering a refusal with something new lets that call, and the rerun after it, run.
+export function isShortCycle(callHistory) {
+  const recent = callHistory.slice(-LOOP_WINDOW)
+  if (recent.length < LOOP_WINDOW) return false
+  const counts = new Map()
+  for (const sig of recent) counts.set(sig, (counts.get(sig) ?? 0) + 1)
+  return counts.size <= LOOP_DISTINCT && [...counts.values()].every((n) => n >= 2)
+}
+
 // Make text use the file's line endings: CRLF when the file has them, LF otherwise.
 function matchLineEndings(text, crlf) {
   if (typeof text !== "string") return text
@@ -404,8 +419,12 @@ export function check(event, cwd, callHistory) {
   // 6. General tool call loop breaker (any tool repeated 3x consecutively with identical args)
   if (tool !== "edit" && checkConsecutiveCalls(callHistory, tool, input) >= 3) {
     return refuse(
-      `repeated identical tool call detected (3x for ${tool}). ` +
-      `The previous calls did not produce a new state. Break this loop: inspect the file/environment or move on to the next step.`
+      `repeated identical tool call detected (3x for ${tool}). ${LOOP_ADVICE}`
+    )
+  }
+  if (isShortCycle(callHistory)) {
+    return refuse(
+      `the last ${LOOP_WINDOW} tool calls repeat ${LOOP_DISTINCT} or fewer different calls with nothing new between them. ${LOOP_ADVICE}`
     )
   }
 

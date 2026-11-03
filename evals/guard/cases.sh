@@ -270,6 +270,38 @@ if ((await verdict("read", { path: sample }))[0] !== "0") fail("reading a file w
 call = load()
 const loop = await Promise.all([0, 1, 2].map(() => verdict("read", { path: sample })))
 if (loop.map((v) => v[0]).join(",") !== "0,0,2") fail(`three identical reads were not refused on the third: ${loop.map((v) => v[0]).join(",")}`)
+// ...and its reason says to stop and report. "Next step" is a call the step gate refuses.
+if (loop[2][1].includes("next step") || !loop[2][1].includes("what blocks you")) fail(`the in-a-row refusal does not say to stop and report: ${loop[2][1]}`)
+// A short cycle: calls that repeat with something between them never reach three in a row.
+const reads = (n) => ["read", { path: sample, offset: n }]
+const test = () => ["bash", { command: "echo test" }]
+const inTurn = async (calls) => { const out = []; for (const [t, a] of calls) out.push(await verdict(t, a)); return out }
+const codes = (vs) => vs.map((v) => v[0]).join("")
+const times = (n, ...calls) => Array.from({ length: n }, () => calls).flat()
+call = load()
+const alternating = await inTurn(times(6, reads(1), test()))
+if (codes(alternating) !== "000000000002") fail(`two alternating calls were not refused on the 12th: ${codes(alternating)}`)
+if (!alternating[11][1].includes("what blocks you")) fail(`the cycle refusal does not say to stop and report: ${alternating[11][1]}`)
+// The cycle from the bench run: a test run three times, the third refused, then the same read.
+call = load()
+const logged = await inTurn(times(3, test(), test(), test(), reads(1)))
+if (codes(logged) !== "002000200022") fail(`the logged test, test, test, read cycle was not refused on the 12th: ${codes(logged)}`)
+// An edit in a cycle with a read is a cycle too: the edit rule alone sees no repeat in a row.
+call = load()
+const sameEdit = () => ["edit", { path: dummy, edits: [{ oldText: "absent", newText: "x" }] }]
+if (codes(await inTurn(times(6, sameEdit(), reads(1)))) !== "000000000002") fail("an edit alternating with a read was not refused on the 12th")
+// A real edit/test cycle is not a loop: each edit is different.
+call = load()
+const fixes = Array.from({ length: 12 }, (_, i) => [["edit", { path: dummy, edits: [{ oldText: "absent", newText: `fix ${i}` }] }], test()]).flat()
+if (/2/.test(codes(await inTurn(fixes)))) fail("an edit/test cycle with different edits was refused")
+// Neither is reading around.
+call = load()
+if (/2/.test(codes(await inTurn(Array.from({ length: 20 }, (_, i) => reads(i)))))) fail("twenty different reads were refused")
+// A refusal the model answers with something new has worked: that call, and the rerun after it, run.
+call = load()
+await inTurn(times(6, reads(1), test()))
+const recovered = await inTurn([["edit", { path: dummy, edits: [{ oldText: "absent", newText: "the fix" }] }], test()])
+if (codes(recovered) !== "00") fail(`a new call after a cycle refusal, or the rerun after it, was refused: ${codes(recovered)}`)
 process.exit(fails ? 1 : 0)
 JS
 
