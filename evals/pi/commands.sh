@@ -15,6 +15,10 @@
 # The gates, with the real dev-implement skill in a throwaway project: a block
 # with a "STOP " line (a refused branch) is never sent, and the user is told
 # instead; a block that is sent already carries the BRANCH line.
+#
+# The idle timeout: a local model below the limit in pi/idle-timeout.js gets one
+# warning a session, and the command still runs. Real Pi handing over a real model
+# and real settings is in evals/pi/live-loop.sh.
 # Needs git and node.
 #
 # Exits 0 when every case holds, 1 otherwise, naming each mismatch.
@@ -173,14 +177,61 @@ for (const f of fails) console.log(`FAIL  ${f}`)
 process.exit(fails.length ? 1 : 0)
 JS
 
+cat > "$work/idle.mjs" <<'JS'
+const [ext, cwd] = process.argv.slice(2)
+const { default: devCommands } = await import(ext)
+const commands = {}, handlers = {}
+const sent = [], told = []
+let settings = {}
+devCommands({
+  registerCommand: (name, opts) => { commands[name] = opts },
+  sendUserMessage: (block) => { sent.push(block) },
+  on: (event, fn) => { (handlers[event] ??= []).push(fn) },
+  getSettings: () => settings,
+})
+const local = { id: "m", baseUrl: "http://127.0.0.1:1234/v1" }
+const hosted = { id: "m", baseUrl: "https://api.example.com/v1" }
+const fails = []
+const run = async (what, model, wantTold) => {
+  told.length = 0
+  sent.length = 0
+  await commands["dev-init"].handler("", { waitForIdle: async () => {}, cwd, model, ui: { notify: (msg, level) => { told.push([msg, level]) } } })
+  if (sent.length !== 1) fails.push(`${what}: the block was not sent`)
+  if (told.length !== wantTold) fails.push(`${what}: told ${told.length}, want ${wantTold}: ${JSON.stringify(told)}`)
+  for (const [msg, level] of told) {
+    if (level !== "warning" || !msg.includes("httpIdleTimeoutMs") || !msg.includes("1200000")) fails.push(`${what}: not the warning: ${level} ${msg}`)
+  }
+}
+const newSession = async () => { for (const fn of handlers.session_start ?? []) await fn({ type: "session_start" }, {}) }
+
+await run("hosted, the default", hosted, 0)
+await run("no baseUrl, the default", { id: "m" }, 0)
+await run("no model", undefined, 0)
+settings = { httpIdleTimeoutMs: 1200000 }
+await run("local, at the limit", local, 0)
+settings = { httpIdleTimeoutMs: "disabled" }
+await run("local, disabled", local, 0)
+settings = {}
+await run("local, the default", local, 1)
+await run("local, the default, again in that session", local, 0)
+await newSession()
+await run("local, the default, in a new session", local, 1)
+await newSession()
+settings = { httpIdleTimeoutMs: 300000 }
+await run("local, too low", local, 1)
+for (const f of fails) console.log(`FAIL  ${f}`)
+process.exit(fails.length ? 1 : 0)
+JS
+
 fails=0
 node "$work/gate.mjs" "$root/pi/commands.js" "$gp" || fails=$((fails + 1))
 cd "$work/proj" || exit 1
 node "$work/run.mjs" "$root/pi/commands.js" "$work/proj" || fails=$((fails + 1))
 DEV_SKILLS_CONTEXT=50000 EXPORTED=50000 node "$work/run.mjs" "$root/pi/commands.js" "$work/proj" || fails=$((fails + 1))
+node "$work/idle.mjs" "$root/pi/commands.js" "$work/proj" || fails=$((fails + 1))
 
 if [ "$fails" -eq 0 ]; then
-  printf 'commands: no window outlives its model, and a STOP never reaches the model\n'
+  printf 'commands: no window outlives its model, a STOP never reaches the model, and a short idle timeout is warned about once\n'
 else
   printf 'commands: %s run(s) failed\n' "$fails" >&2
 fi

@@ -15,6 +15,7 @@
 # httpIdleTimeoutMs the call drops as `terminated`, and below it the call arrives.
 # A call cut off at the output limit is refused, and the run goes on. The setting
 # in the README and in the bench's preflight rests on this, so a new pin re-tests it.
+# And that the warning in pi/commands.js sees what Pi really hands an extension.
 #
 # Skips when Pi is not installed, which includes CI.
 # Exits 0 when every case holds, 1 otherwise, naming each failure.
@@ -173,6 +174,15 @@ expect("silence under the timeout did not deliver the call", r.retries === 0 && 
 ;[r] = await session(["cut", "text"])
 expect("a call cut off at the limit was not refused", r.tools.length === 1 && r.tools[0].isError && r.tools[0].text.includes("Re-issue the tool call"), r.tools)
 expect("the run did not go on after the cut", r.retries === 0 && r.stops[0] === "length" && r.stops[1] === "stop" && r.aborted === false, { retries: r.retries, stops: r.stops, aborted: r.aborted })
+
+// The warning with what Pi really hands an extension: its model, with baseUrl, and its settings.
+const commandsExt = `${root}/pi/commands.js`
+;[r] = await session(["text"], ["/dev-init"], [commandsExt])
+expect("a /dev-* command on a local model with Pi's default was not warned", r.notes.some((n) => n.includes("httpIdleTimeoutMs") && n.includes("300 s")), r.notes)
+expect("the warned command did not run", r.stops[0] === "stop", r.stops)
+;[r] = await session(["text"], ["/dev-init"], [commandsExt], { httpIdleTimeoutMs: 1200000 })
+expect("a /dev-* command at the limit was warned", !r.notes.some((n) => n.includes("httpIdleTimeoutMs")), r.notes)
+expect("the command at the limit did not run", r.stops[0] === "stop", r.stops)
 
 server.close()
 for (const f of fails) console.log(`FAIL  ${f}`)
