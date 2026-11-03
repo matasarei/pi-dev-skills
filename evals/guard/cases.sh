@@ -186,7 +186,7 @@ const load = () => {
   const handlers = {}
   mod.default({ on: (name, fn) => { handlers[name] = fn } })
   if (typeof handlers.tool_call !== "function") throw new Error("the extension registered no tool_call handler")
-  const fn = (toolName, input, cwd = dir) => handlers.tool_call({ type: "tool_call", toolCallId: "t", toolName, input }, { cwd })
+  const fn = (toolName, input, cwd = dir, toolCallId = "t") => handlers.tool_call({ type: "tool_call", toolCallId, toolName, input }, { cwd })
   fn.handlers = handlers
   return fn
 }
@@ -351,6 +351,96 @@ await inTurn(times(4, reads(1)))
 call.handlers.agent_start?.()
 const retry = await inTurn([reads(1)])
 if (codes(retry) !== "2" || !retry[0][2]) fail(`a retry's agent_start cleared the loop: ${codes(retry)} stop ${retry[0][2]}`)
+// A call that fails Pi's validation never reaches the hook: Pi rejects it first, so
+// only the two execution events tell the guard it happened. The bench's step 2 sent
+// one such edit 179 times in a row.
+let ids = 0
+const session = () => { const ctx = { aborts: 0, notes: [], abort() { ctx.aborts++ }, ui: { notify: (m, t) => ctx.notes.push([m, t]) } }; return ctx }
+const rejected = (ctx, [toolName, args]) => {
+  const toolCallId = `rejected-${ids++}`
+  call.handlers.tool_execution_start?.({ type: "tool_execution_start", toolCallId, toolName, args }, ctx)
+  call.handlers.tool_execution_end?.({ type: "tool_execution_end", toolCallId, toolName, result: { content: [] }, isError: true }, ctx)
+}
+const brokenEdit = (n = 0) => ["edit", { path: dummy, edits: `[{"oldText": "a${n}"}]}]` }]
+const rejectedTimes = (ctx, n, c = brokenEdit()) => { for (let i = 0; i < n; i++) rejected(ctx, c) }
+// The fifth identical failure in a row is the third repeat hit: the run ends there, and the user is told why.
+call = load()
+let ctx = session()
+rejectedTimes(ctx, 4)
+if (ctx.aborts !== 0 || ctx.notes.length) fail(`four failed calls already stopped the run: ${ctx.aborts} ${JSON.stringify(ctx.notes)}`)
+rejectedTimes(ctx, 1)
+if (ctx.aborts !== 1) fail(`the fifth identical failed call did not abort the run: ${ctx.aborts}`)
+if (ctx.notes.length !== 1 || ctx.notes[0][1] !== "error" || !ctx.notes[0][0].includes("This run stops here.")) fail(`the stop did not notify the user: ${JSON.stringify(ctx.notes)}`)
+// A model that fails three times and then does something else is fine: the bench's first runs did that, then used write.
+call = load()
+ctx = session()
+rejectedTimes(ctx, 3)
+await inTurn(Array.from({ length: 5 }, (_, i) => reads(i)))
+if (ctx.aborts !== 0) fail("three failed calls and then other work stopped the run")
+// Different failed calls are not a loop.
+call = load()
+ctx = session()
+for (let i = 0; i < 8; i++) rejected(ctx, brokenEdit(i))
+if (ctx.aborts !== 0) fail("eight different failed calls stopped the run")
+// A failed call in a cycle with a valid one: the short-cycle rule sees both.
+call = load()
+ctx = session()
+const seq = []
+for (let i = 0; i < 7; i++) { seq.push(await verdict(...reads(1))); rejected(ctx, brokenEdit()); seq.push(ctx.aborts) }
+if (seq[12][0] !== "2") fail(`a read alternating with a failed edit was not refused on the 13th call: ${seq[12][0]}`)
+if (ctx.aborts !== 1 || seq[11] !== 0) fail(`a read alternating with a failed edit did not stop on the 14th call: ${seq[11]} then ${ctx.aborts}`)
+// One counter: hits from failed calls and from refusals add up.
+call = load()
+ctx = session()
+rejectedTimes(ctx, 4)
+const mixed = await inTurn(times(3, reads(1)))
+if (codes(mixed) !== "002" || !mixed[2][2]) fail(`hits from failed calls and refusals did not add up to the stop: ${codes(mixed)} stop ${mixed[2][2]}`)
+// A call that reached the hook is counted there and not again, even when it then fails: a failing test run is not a rejected call.
+call = load()
+ctx = session()
+const ran = async ([toolName, args]) => {
+  const toolCallId = `ran-${ids++}`
+  call.handlers.tool_execution_start?.({ type: "tool_execution_start", toolCallId, toolName, args }, ctx)
+  const r = await call(toolName, args, dir, toolCallId)
+  call.handlers.tool_execution_end?.({ type: "tool_execution_end", toolCallId, toolName, result: { content: [] }, isError: true }, ctx)
+  return r
+}
+const twice = [await ran(test()), await ran(test())]
+if (twice.some(Boolean)) fail("a call that reached the hook and then failed was counted twice")
+if (ctx.aborts !== 0) fail("a call that reached the hook and then failed stopped the run")
+// A call that succeeds, or an end with no start, records nothing.
+call = load()
+ctx = session()
+for (let i = 0; i < 6; i++) {
+  call.handlers.tool_execution_start?.({ type: "tool_execution_start", toolCallId: `ok-${i}`, toolName: "read", args: { path: sample } }, ctx)
+  call.handlers.tool_execution_end?.({ type: "tool_execution_end", toolCallId: `ok-${i}`, toolName: "read", result: { content: [] }, isError: false }, ctx)
+  call.handlers.tool_execution_end?.({ type: "tool_execution_end", toolCallId: `none-${i}`, toolName: "read", result: { content: [] }, isError: true }, ctx)
+}
+if (ctx.aborts !== 0) fail("a successful call, or an end with no start, was counted")
+// Old hits expire, as they do for refusals.
+const spreadFailed = async (between) => {
+  call = load()
+  ctx = session()
+  rejectedTimes(ctx, 4)
+  await inTurn(Array.from({ length: between }, (_, i) => reads(200 + i)))
+  rejectedTimes(ctx, 3, brokenEdit(9))
+  return ctx.aborts
+}
+if ((await spreadFailed(16)) !== 1) fail("a third hit 20 calls after the first did not abort the run")
+if ((await spreadFailed(17)) !== 0) fail("a third hit 21 calls after the first aborted the run")
+// A new prompt clears it, and a retry does not.
+call = load()
+ctx = session()
+rejectedTimes(ctx, 4)
+call.handlers.before_agent_start?.()
+rejectedTimes(ctx, 4)
+if (ctx.aborts !== 0) fail("a new prompt did not clear the failed calls")
+call = load()
+ctx = session()
+rejectedTimes(ctx, 4)
+call.handlers.agent_start?.()
+rejectedTimes(ctx, 1)
+if (ctx.aborts !== 1) fail("a retry's agent_start cleared the failed calls")
 process.exit(fails ? 1 : 0)
 JS
 
