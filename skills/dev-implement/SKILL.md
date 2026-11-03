@@ -21,6 +21,8 @@ Uncommitted changes not yours → stop and ask. Resuming (`--continue`) → the 
 
 **Shell before reading.** `wc -l` before opening; `sed -n 'a,bp'` for ranges; `grep -rn` for symbols. Whole file only under 300 lines. Copy tool output; never retype it.
 
+**Reuse the test setup.** New tests use the setup their file already has (its `beforeEach`, its helpers), never a fresh one.
+
 **Red first.** `Red:` names a test → write it before any production line, run `bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/test.sh --red <name>`, quote `RED PROVEN`. `RED NOT PROVEN` → the test proves nothing; fix it, never build past it. `RED UNCLEAR` → make it load (missing `testScoped` → fix the profile), rerun once, report red unproven. `none`, or no `Red:` line → say so.
 
 1. Open `Modify:` paths first, at lines named. **Check before edit**: if path status or `git diff` shows the change already made, do not re-edit.
