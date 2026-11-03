@@ -76,7 +76,8 @@ const session = (steps, prompts = ["go"], first = []) => new Promise((resolve) =
   const send = () => pi.stdin.write(JSON.stringify({ type: "prompt", message: prompts[runs.length] }) + "\n")
   // Wait for it to go: a request still in flight would take a step of the next case's script.
   const finish = () => { clearTimeout(timer); pi.once("exit", () => resolve(runs)); pi.kill() }
-  const timer = setTimeout(() => { run.timedOut = true; runs.push(run); finish() }, 60000)
+  // A hang fails by name, not as counts that happen not to match.
+  const timer = setTimeout(() => { fails.push(`timed out after 60 s, on the script ${JSON.stringify(steps.slice(0, 6))}`); runs.push(run); finish() }, 60000)
   createInterface({ input: pi.stdout }).on("line", (line) => {
     let e
     try { e = JSON.parse(line) } catch { return }
