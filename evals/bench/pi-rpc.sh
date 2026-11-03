@@ -78,6 +78,17 @@ check retried 0 10 "[$start,$failed,$retry,{\"wait\":200},$start,$answer,{\"type
 # Retries used up: the failure stands, and the run is still over.
 check gave-up 0 10 "[$start,$failed,{\"type\":\"auto_retry_end\",\"success\":false},$settled]" agent_settled
 
+# A runaway stopped and nudged: the run settles aborted, and another starts straight
+# after. The nudge's answer is the session's real end.
+aborted='{"type":"agent_settled","aborted":true}'
+nudged='{"type":"message_end","message":{"role":"assistant","content":"the nudged answer"}}'
+check nudged 0 10 "[$start,$aborted,{\"wait\":100},$start,$nudged,$ended,$settled]" 'the nudged answer'
+
+# Settled just before the limit, with the limit passing during the wait for another run:
+# it finished, so it isn't a timeout.
+check settled-at-limit 0 1 "[{\"wait\":700},$start,$ended,$settled]" agent_settled
+grep -q bench_timeout "$work/settled-at-limit.jsonl" && note "settled-at-limit: counted as a timeout"
+
 # A gated command notifies and never starts the agent.
 check gated 3 10 '[{"type":"extension_ui_request","method":"notify","notifyType":"error","message":"STOP"}]' notify
 

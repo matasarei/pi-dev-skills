@@ -15,6 +15,10 @@ const pi = spawn("pi", ["--mode", "rpc", "--no-session", "--model", model], { cw
 const events = createWriteStream(eventsFile)
 let started = false
 let finished = false
+// A run can start right after one settles: a runaway reply is stopped and its nudge sent
+// from agent_settled (pi/commands.js). So the session ends only if none follows.
+const SETTLE_GRACE_MS = 1000
+let settling = null
 let timedOut = false
 let gated = false
 let buf = ""
@@ -27,7 +31,15 @@ const quit = (code) => {
   })
 }
 
+const finish = () => {
+  if (finished) return
+  finished = true
+  send({ type: "get_session_stats" })
+}
+
 const timer = setTimeout(() => {
+  // Settled, and only waiting to see if another run starts: it finished in time.
+  if (settling) return finish()
   events.write(JSON.stringify({ type: "bench_timeout", seconds: Number(timeoutSeconds) }) + "\n")
   finished = true
   timedOut = true
@@ -51,7 +63,11 @@ pi.stdout.on("data", (d) => {
     events.write(line + "\n")
     let e
     try { e = JSON.parse(line) } catch { continue }
-    if (e.type === "agent_start") started = true
+    if (e.type === "agent_start") {
+      started = true
+      clearTimeout(settling)
+      settling = null
+    }
     // A command that stops before the model runs only notifies; nothing else follows.
     if (e.type === "extension_ui_request" && e.method === "notify" && e.notifyType === "error" && !started && !finished) {
       finished = true
@@ -60,8 +76,7 @@ pi.stdout.on("data", (d) => {
     }
     // Not agent_end: Pi ends the agent run on a dropped stream, then retries it.
     if (e.type === "agent_settled" && started && !finished) {
-      finished = true
-      send({ type: "get_session_stats" })
+      settling = setTimeout(finish, SETTLE_GRACE_MS)
     }
     if (e.type === "response" && e.command === "get_session_stats") {
       writeFileSync(statsFile, JSON.stringify(e.data ?? {}, null, 2))
