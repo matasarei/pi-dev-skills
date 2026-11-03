@@ -6,7 +6,7 @@
 # bench/space-city/replay.mjs resends one logged reply's request to a model. The
 # tool itself is manual and needs a model; this suite needs neither. A log it
 # writes itself and a mock that records every request show what the tool lists,
-# what it sends, and when it sends nothing.
+# what it sends, what it records of the answer, and when it sends nothing.
 #
 # Exits 0 when every case holds, 1 otherwise, naming each failure.
 
@@ -20,7 +20,7 @@ trap 'rm -rf "$work"' EXIT INT TERM
 cat > "$work/run.mjs" <<'JS'
 import { execFile } from "node:child_process"
 import { createServer } from "node:http"
-import { mkdirSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 const [root, work] = process.argv.slice(2)
 const tool = `${root}/bench/space-city/replay.mjs`
 const fails = []
@@ -28,12 +28,14 @@ const expect = (name, ok, got) => { if (!ok) fails.push(`${name}: ${JSON.stringi
 
 // The mock provider: records every request, and answers each as the current script says.
 let requests = []
+let answer = null
 const chunk = (delta, finish = null) => `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 1, model: "m", choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`
 const server = createServer((req, res) => {
   let body = ""
   req.on("data", (d) => { body += d })
   req.on("end", () => {
     requests.push({ url: req.url, body: JSON.parse(body) })
+    if (answer) return answer(res)
     res.writeHead(200, { "content-type": "text/event-stream" })
     res.write(chunk({ role: "assistant", content: "done" }))
     res.write(chunk({}, "stop"))
@@ -182,13 +184,147 @@ setModels({ providers: { mock: { baseUrl: "https://example.invalid/v1", models: 
 await refuses("a server that isn't plain http", [file, "1"], "http")
 setModels(models())
 
+// What comes back. Each case: what the mock answers, then the JSON line and the files.
+const stream = (res) => res.writeHead(200, { "content-type": "text/event-stream" })
+const finished = (res, finish, tokens = 11) => {
+  res.write(chunk({}, finish))
+  res.write(`data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", choices: [], usage: { completion_tokens: tokens } })}\n\n`)
+  res.end("data: [DONE]\n\n")
+}
+const runReplay = async (args, env) => {
+  rmSync(`${work}/replays`, { recursive: true, force: true })
+  const out = await replay(args, env)
+  let line = {}
+  try { line = JSON.parse(out.stdout) } catch {}
+  const dirs = existsSync(`${work}/replays`) ? readdirSync(`${work}/replays`) : []
+  return { ...out, line, dir: dirs[0] && `${work}/replays/${dirs[0]}`, dirs }
+}
+const read = (dir, name) => readFileSync(`${dir}/${name}`, "utf8")
+
+// A tool call's name, a silence, its arguments in two pieces: LM Studio's shape, with the silence measured.
+answer = (res) => {
+  stream(res)
+  res.write(chunk({ role: "assistant", content: "Reading ", tool_calls: [{ index: 0, id: "c1", type: "function", function: { name: "read", arguments: "" } }] }))
+  setTimeout(() => {
+    res.write(chunk({ tool_calls: [{ index: 0, function: { arguments: '{"path":' } }] }))
+    res.write(chunk({ tool_calls: [{ index: 0, function: { arguments: '"x"}' } }] }))
+    finished(res, "tool_calls")
+  }, 1500)
+}
+r = await runReplay([file, "1"])
+expect("a tool call: not exit 0", r.code === 0, r)
+expect("a tool call: the line", r.line.finish === "tool_calls" && r.line.tool === "read" && r.line.tokens === 11 && r.line.textChars === 8 && r.line.argsChars === 12 && r.line.argsValidJson === true, r.line)
+expect("a tool call: the silence", r.line.longestSilenceSeconds >= 1.3 && r.line.longestSilenceSeconds < 5 && r.line.firstByteSeconds < 1.3 && r.line.seconds >= 1.3, r.line)
+expect("a tool call: the directory", r.dirs.length === 1 && /^step-1-1-\d{8}-\d{6}$/.test(r.dirs[0]) && r.line.dir === r.dir, { dirs: r.dirs, line: r.line.dir })
+expect("a tool call: request.json is not what was sent", JSON.stringify(JSON.parse(read(r.dir, "request.json"))) === JSON.stringify(requests.at(-1).body), "differs")
+expect("a tool call: the files", read(r.dir, "text.txt") === "Reading " && read(r.dir, "args.txt") === '{"path":"x"}\n', { text: read(r.dir, "text.txt"), args: read(r.dir, "args.txt") })
+expect("a tool call: stream.log has no times", /^\d+ data: /.test(read(r.dir, "stream.log")), read(r.dir, "stream.log").slice(0, 60))
+
+// Two calls in one reply, each with its own arguments, and one of them cut short.
+answer = (res) => {
+  stream(res)
+  res.write(chunk({ role: "assistant", tool_calls: [{ index: 0, id: "c1", type: "function", function: { name: "read", arguments: '{"path":"x"}' } }, { index: 1, id: "c2", type: "function", function: { name: "bash", arguments: '{"comm' } }] }))
+  finished(res, "tool_calls")
+}
+r = await runReplay([file, "1"])
+expect("two calls: the line", r.line.tool === "read,bash" && r.line.argsValidJson === false && r.line.argsChars === 18, r.line)
+expect("two calls: args.txt", read(r.dir, "args.txt") === '{"path":"x"}\n{"comm\n', read(r.dir, "args.txt"))
+
+// A reply that repeats itself: the lines show it, escaped newlines in arguments counted too.
+answer = (res) => {
+  stream(res)
+  res.write(chunk({ role: "assistant", content: "Other\n\nsame\nsame\nsame", tool_calls: [{ index: 0, id: "c1", type: "function", function: { name: "read", arguments: JSON.stringify({ path: "a\nb\nb" }) } }] }))
+  finished(res, "length", 1024)
+}
+r = await runReplay([file, "1"])
+expect("repeats: the line", r.line.finish === "length" && r.line.tokens === 1024 && r.line.lines === 8 && r.line.distinctLines === 6, r.line)
+expect("the same start as the log was not seen", r.line.sameStartAsLog === false, r.line)
+answer = (res) => {
+  stream(res)
+  res.write(chunk({ role: "assistant", content: "Reading two:\n\n and more" }))
+  finished(res, "stop")
+}
+r = await runReplay([file, "1"])
+expect("the same start as the log", r.line.sameStartAsLog === true && r.line.tool === "-" && r.line.argsValidJson === null && r.line.argsChars === 0, r.line)
+
+// Its own limit, not undici's: a silence past --limit exits 2 and keeps what came.
+answer = (res) => {
+  stream(res)
+  res.write(chunk({ role: "assistant", content: "Reading " }))
+}
+r = await runReplay([file, "1", "--limit", "1"])
+expect("the limit: not exit 2", r.code === 2 && r.line.finish === "limit" && r.line.textChars === 8, r)
+expect("the limit: the files", read(r.dir, "text.txt") === "Reading ", "no text.txt")
+expect("the tool uses fetch, with undici's 300 s body timeout", !readFileSync(tool, "utf8").match(/\bfetch\(/), "fetch(")
+await refuses("--limit with no value", [file, "1", "--limit"], "usage")
+await refuses("--limit that isn't a number", [file, "1", "--limit", "soon"], "usage")
+await refuses("--limit of nothing", [file, "1", "--limit", "0"], "usage")
+
+// The stream ending without a finish reason: it was cut, and says so.
+answer = (res) => {
+  stream(res)
+  res.write(chunk({ role: "assistant", content: "Reading " }))
+  setTimeout(() => res.destroy(), 50)
+}
+r = await runReplay([file, "1"])
+expect("a dropped stream: not exit 1", r.code === 1 && r.line.finish === "dropped" && r.stderr.includes("before it finished"), r)
+
+// The server saying no: exit 1, and it says what.
+answer = (res) => { res.writeHead(500, { "content-type": "application/json" }); res.end('{"error":"no model loaded"}') }
+r = await runReplay([file, "1"])
+expect("a 500: not exit 1 with the reason", r.code === 1 && r.stderr.includes("500") && r.stderr.includes("no model loaded"), r)
+answer = (res) => { stream(res); res.write(`data: ${JSON.stringify({ error: { message: "context is full" } })}\n\n`); res.end() }
+r = await runReplay([file, "1"])
+expect("an error in the stream: not exit 1 with the reason", r.code === 1 && r.stderr.includes("context is full"), r)
+answer = null
+setModels({ providers: { mock: { baseUrl: "http://127.0.0.1:9/v1", models: [model] } } })
+r = await runReplay([file, "1"])
+expect("a closed port: not exit 1", r.code === 1 && r.stderr.includes("request failed"), r)
+
+// On LM Studio it checks the model is loaded at its window, as run.sh does.
+const lmHome = `${work}/home`
+mkdirSync(`${lmHome}/.lmstudio/bin`, { recursive: true })
+const lms = `${lmHome}/.lmstudio/bin/lms`
+const fakeLms = (line) => { writeFileSync(lms, `#!/bin/sh\nprintf '%s\\n' 'IDENTIFIER MODEL STATUS' '${line}'\n`); chmodSync(lms, 0o755) }
+const lmEvents = events.map((e) => (e.message?.provider ? { ...e, message: { ...e.message, provider: "lmstudio" } } : e))
+const lmFile = log(lmEvents, "lm.jsonl")
+setModels({ providers: { lmstudio: { baseUrl, models: [model] } } })
+const home = { HOME: lmHome }
+fakeLms("m m IDLE 8.52 GB 32768 4 Local")
+requests = []
+r = await replay([lmFile, "1"], home)
+expect("loaded at the window: not sent", r.code === 0 && requests.length === 1, r)
+fakeLms("m m IDLE 8.52 GB 4096 4 Local")
+requests = []
+r = await replay([lmFile, "1"], home)
+expect("loaded at another window: not refused", r.code === 1 && requests.length === 0 && r.stderr.includes("lms load"), r)
+fakeLms("other other IDLE 8.52 GB 32768 4 Local")
+requests = []
+r = await replay([lmFile, "1"], home)
+expect("not loaded: not refused", r.code === 1 && requests.length === 0, r)
+rmSync(lms)
+requests = []
+r = await replay([lmFile, "1"], home)
+expect("no lms: not sent with a warning", r.code === 0 && requests.length === 1 && r.stderr.includes("not checked"), r)
+setModels(models())
+
 server.close()
 for (const f of fails) console.log(`FAIL  ${f}`)
 process.exit(fails.length ? 1 : 0)
 JS
 
-if node "$work/run.mjs" "$root" "$work"; then
-  printf 'replay: every reply is listed, its request is rebuilt from the log, and a refusal sends nothing\n'
+fails=0
+node "$work/run.mjs" "$root" "$work" || fails=1
+
+# score.sh reads a run's step logs by name at the top of its directory, so a replay's
+# files under replays/ can't change a row.
+grep -qF '/^step-\d+(-retry\d+)?\.jsonl$/' "$root/bench/space-city/score.sh" || {
+  printf 'FAIL  score.sh no longer reads only the step logs by name\n'
+  fails=1
+}
+
+if [ "$fails" -eq 0 ]; then
+  printf 'replay: every reply is listed, its request is rebuilt from the log, its answer is recorded, and a refusal sends nothing\n'
   exit 0
 fi
 printf 'replay: case(s) failed\n' >&2
