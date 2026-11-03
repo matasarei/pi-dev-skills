@@ -67,6 +67,14 @@ run .tasks/mytask.md --step 2
 [ "$(on)" = "step/mytask-1" ] || note "dirty switch: moved to '$(on)'"
 printf '%s\n' "$out" | head -1 | grep -q '^STOP BRANCH refused' || note "dirty switch: first line is not 'STOP BRANCH refused': $out"
 [ "$rc" -eq 3 ] || note "dirty switch: exit $rc, want 3"
+# Step 1 is still unticked: the refusal names it and how to resume it, not only "commit or stash".
+has "Step 1 is not finished: /dev-implement $repo/.tasks/mytask.md --continue resumes it." || note "dirty switch: the unfinished step is not named: $out"
+# With no earlier step unticked there is nothing to resume, and the message says nothing of it.
+printf '# T\n\n## Steps\n\n1. [x] one — done\n2. [ ] two\n' > "$repo/.tasks/ticked.md"
+run .tasks/ticked.md --step 2
+printf '%s\n' "$out" | head -1 | grep -q '^STOP BRANCH refused' || note "dirty, earlier step ticked: not refused: $out"
+has 'is not finished' && note "dirty, earlier step ticked: named an unfinished step: $out"
+rm -f "$repo/.tasks/ticked.md"
 
 # Dirty, but on the step's own branch already: the resume case, not a stop.
 run .tasks/mytask.md --step 1

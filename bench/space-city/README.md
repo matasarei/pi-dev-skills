@@ -44,6 +44,13 @@ A start the harness gates itself (a refused branch: `step-start.sh`'s `STOP`) ne
 model; `meta.env` records that step's exit as 3.
 That holds for both harnesses alike.
 
+On Pi, a step that ends unticked gets one more session with `--continue`, the README's recovery
+for a stuck run, with its own timeout and its log in `step-<n>-retry1.jsonl`. It doesn't get one
+when the start was gated, when Pi itself failed, or when an earlier step is the unticked one.
+`meta.env` records `step<n>_resumes`, and `step<n>_seconds` covers every attempt, so a run can
+take up to twice as long. `BENCH_RESUMES` sets the number; rows up to `pi@d028952` in
+`results.md` had none, and `BENCH_RESUMES=0` reproduces them.
+
 ## What a row says
 
 Read from the tree and the logs, never from what the model reported. The tests run in a copy of

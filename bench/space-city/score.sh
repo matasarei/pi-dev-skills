@@ -77,7 +77,7 @@ read -r refusals passes <<EOF
 $(node -e '
   const fs = require("fs"), dir = process.argv[1]
   let r = 0, p = 0
-  for (const f of fs.readdirSync(dir).filter((f) => /^step-\d+\.jsonl$/.test(f))) {
+  for (const f of fs.readdirSync(dir).filter((f) => /^step-\d+(-retry\d+)?\.jsonl$/.test(f))) {
     for (const l of fs.readFileSync(`${dir}/${f}`, "utf8").split("\n")) {
       let e; try { e = JSON.parse(l) } catch { continue }
       if (e.type !== "tool_execution_end") continue

@@ -18,6 +18,7 @@
 # it. pi/commands.js sends no block that has a STOP line; the user sees it instead:
 #
 #   STOP BRANCH refused — uncommitted changes would follow the switch to …   exit 3
+#   Step 1 is not finished: /dev-implement <file> --continue resumes it.     when one is
 #   STOP <file> is **Mode:** manual — built by hand: /dev-plan-manual …      exit 3
 #
 # Nothing at all, exit 0, when there is no step to start — no such file, no
@@ -40,6 +41,11 @@ branch="$(bash "$HERE/branch.sh" "$file" "$n" 2>&1)"
 rc=$?
 if [ "$rc" -ne 0 ]; then
   printf 'STOP %s\n' "$branch"
+  # "Commit or stash" leads the wrong way when the work is an earlier step's.
+  first="$(bash "$HERE/task-step.sh" "$file" --next 2>/dev/null | sed -n 's/^## Step \([0-9][0-9]*\) of .*/\1/p' | head -1)"
+  if [ -n "$first" ] && [ "$first" -lt "$n" ]; then
+    echo "Step $first is not finished: /dev-implement $file --continue resumes it."
+  fi
   exit 3
 fi
 printf '%s\n' "$branch"
