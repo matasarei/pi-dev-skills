@@ -76,6 +76,7 @@ pi.stdout.on("data", (d) => {
     }
     // Not agent_end: Pi ends the agent run on a dropped stream, then retries it.
     if (e.type === "agent_settled" && started && !finished) {
+      clearTimeout(settling)
       settling = setTimeout(finish, SETTLE_GRACE_MS)
     }
     if (e.type === "response" && e.command === "get_session_stats") {

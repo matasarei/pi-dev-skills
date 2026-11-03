@@ -84,6 +84,9 @@ aborted='{"type":"agent_settled","aborted":true}'
 nudged='{"type":"message_end","message":{"role":"assistant","content":"the nudged answer"}}'
 check nudged 0 10 "[$start,$aborted,{\"wait\":100},$start,$nudged,$ended,$settled]" 'the nudged answer'
 
+# Two settles and then a run: the run cancels the wait, however many settles came first.
+check settled-twice 0 10 "[$start,$settled,$settled,{\"wait\":100},$start,{\"wait\":1500},$nudged,$ended,$settled]" 'the nudged answer'
+
 # Settled just before the limit, with the limit passing during the wait for another run:
 # it finished, so it isn't a timeout.
 check settled-at-limit 0 1 "[{\"wait\":700},$start,$ended,$settled]" agent_settled
