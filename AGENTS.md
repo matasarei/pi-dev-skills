@@ -36,6 +36,7 @@ When developing, updating, or debugging skills in this repository:
    - Every file under `lib/` must have test cases in `evals/lib/`: `<script>.sh` for a shell script, and `steps.sh` for `steps.awk`. The guard has `evals/guard/cases.sh`; the expander is covered by `evals/skills/injected.sh`.
    - A suite that reads `DEV_SKILLS_CONTEXT` or `PI_MODEL` unsets it at the top: run from inside Pi, it would inherit the session's.
    - `evals/guard/cases.sh` calls the guard's handlers directly, so it skips what Pi does first. A rule that depends on Pi's order of events (validation before the hook, a retry after a dropped stream) also needs a case in `evals/pi/live-loop.sh`, which runs real Pi against a mock provider and skips in CI, where Pi isn't installed.
+   - Anything that needs the real model lives under `bench/` and is run by hand, never from `evals/run-all.sh`: a result that varies between runs can't gate a change. `bench/space-city/README.md` says what runs when.
    - Run the target test during iteration (`bash evals/lib/<script>.sh`), then run the full suite: `bash evals/run-all.sh` (every suite must pass; it prints the count itself).
 4. **No sync step**: `pi install` of a local directory loads it from the checkout. A changed `SKILL.md` or `lib/` script applies on the next command; a changed `pi/*.js` after `/reload`.
 5. **Verify Loaded in Pi**:
