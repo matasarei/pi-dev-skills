@@ -163,7 +163,12 @@ function buildRequest(system, { message, context }, model, set) {
   }
 }
 
-const stamp = () => new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15)
+// Local time, as run.sh names its runs.
+const stamp = () => {
+  const now = new Date()
+  const two = (n) => String(n).padStart(2, "0")
+  return `${now.getFullYear()}${two(now.getMonth() + 1)}${two(now.getDate())}-${two(now.getHours())}${two(now.getMinutes())}${two(now.getSeconds())}`
+}
 
 // Send it, record what comes back and when, say what happened, and exit.
 function send(baseUrl, body, { dir, loggedText, limit }) {
