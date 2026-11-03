@@ -17,6 +17,10 @@
 # in the README and in the bench's preflight rests on this, so a new pin re-tests it.
 # And that the warning in pi/commands.js sees what Pi really hands an extension.
 #
+# A runaway reply, stopped mid-stream during a /dev-* command: the next request has
+# the nudge and not the repeated text, because Pi leaves an aborted reply out of it,
+# and a run started from agent_settled really runs.
+#
 # Skips when Pi is not installed, which includes CI.
 # Exits 0 when every case holds, 1 otherwise, naming each failure.
 
@@ -45,16 +49,32 @@ const fails = []
 // The mock provider: each request gets the next step of the script, the last one repeating.
 let script = []
 let served = 0
+let bodies = []
 const chunk = (delta, finish = null) => `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 1, model: "m", choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`
 const calls = { broken: ["edit", { path: "notes.txt", edits: '[{"oldText": "hello", "newText": "bye"}]}]' }], read: ["read", { path: "notes.txt" }] }
 // A tool call's name now and its arguments after a silence, or never: the output limit ends it.
 const SILENCE_MS = 3000
+// One line, over and over, until the client goes or the output limit would end it.
+const REPEATED = "The test calls clearZone on a cell with no entity, so let me look again at what it does.\n"
 const server = createServer((req, res) => {
-  req.resume()
+  let body = ""
+  req.on("data", (d) => { body += d })
   req.on("end", () => {
+    if (req.url.includes("chat/completions")) bodies.push(JSON.parse(body))
     const step = script[Math.min(served, script.length - 1)]
     served++
     res.writeHead(200, { "content-type": "text/event-stream" })
+    if (step === "repeat") {
+      let lines = 0
+      const timer = setInterval(() => {
+        if (lines++ < 300) return res.write(chunk({ role: "assistant", content: REPEATED }))
+        clearInterval(timer)
+        res.write(chunk({}, "length"))
+        res.end("data: [DONE]\n\n")
+      }, 5)
+      res.on("close", () => clearInterval(timer))
+      return
+    }
     if (step === "silent" || step === "cut") {
       const named = { index: 0, id: `call${served}`, type: "function", function: { name: "read", arguments: "" } }
       res.write(chunk({ role: "assistant", content: "Reading: ", tool_calls: [named] }))
@@ -90,9 +110,12 @@ await new Promise((r) => server.listen(0, "127.0.0.1", r))
 writeFileSync(`${work}/agent/models.json`, JSON.stringify({ providers: { mock: { baseUrl: `http://127.0.0.1:${server.address().port}/v1`, api: "openai-completions", apiKey: "x", models: [{ id: "m", name: "m", input: ["text"], contextWindow: 32768, maxTokens: 1024 }] } } }))
 
 // One Pi process, one prompt per entry: what each prompt's run did, up to agent_settled.
-const session = (steps, prompts = ["go"], first = [], settings = {}) => new Promise((resolve) => {
+// settles: how many agent_settled to wait for, when a run starts another. linger: how long
+// to stay after the last, to see a request that shouldn't come.
+const session = (steps, prompts = ["go"], first = [], settings = {}, { settles = prompts.length, linger = 0 } = {}) => new Promise((resolve) => {
   script = steps
   served = 0
+  bodies = []
   writeFileSync(`${work}/agent/settings.json`, JSON.stringify(settings))
   const pi = spawn("pi", ["--mode", "rpc", "--no-session", "--no-extensions", ...first.flatMap((e) => ["-e", e]), "-e", `${root}/pi/guard.js`, "-e", `${root}/pi/edit.js`, "--model", "mock/m"], { cwd: proj, env: { ...process.env, PI_CODING_AGENT_DIR: `${work}/agent` }, stdio: ["pipe", "pipe", "ignore"] })
   const runs = []
@@ -115,7 +138,7 @@ const session = (steps, prompts = ["go"], first = [], settings = {}) => new Prom
       runs.push(run)
       run = fresh()
       if (runs.length < prompts.length) send()
-      else finish()
+      else if (runs.length >= settles) setTimeout(finish, linger)
     }
   })
   send()
@@ -184,13 +207,30 @@ expect("the warned command did not run", r.stops[0] === "stop", r.stops)
 expect("a /dev-* command at the limit was warned", !r.notes.some((n) => n.includes("httpIdleTimeoutMs")), r.notes)
 expect("the command at the limit did not run", r.stops[0] === "stop", r.stops)
 
+// A runaway during a command: stopped, and the nudge goes out with a clean context.
+const nudge = "Your last reply started repeating itself"
+const inRequest = (body, text) => JSON.stringify(body.messages).includes(text)
+let runs = await session(["repeat", "text"], ["/dev-init"], [commandsExt], { httpIdleTimeoutMs: 1200000 }, { settles: 2 })
+expect("a runaway was not stopped", runs[0]?.aborted === true && runs[0]?.notes.some((n) => n.includes("repeating")), runs[0])
+expect("no nudged request", bodies.length === 2 && bodies[1].messages.at(-1).role === "user" && inRequest({ messages: [bodies[1].messages.at(-1)] }, nudge), bodies.length)
+expect("the repeated text reached the next request", !inRequest(bodies[1] ?? { messages: [] }, REPEATED.trim()), "repeated text in the request")
+expect("the nudged run did not finish", runs[1]?.aborted === false && runs[1]?.stops[0] === "stop", runs[1])
+
+// Always repeating: three requests, the third stop ends it, and nothing follows.
+runs = await session(["repeat"], ["/dev-init"], [commandsExt], { httpIdleTimeoutMs: 1200000 }, { settles: 3, linger: 500 })
+expect("a run that keeps repeating did not stop after 3", bodies.length === 3 && runs.at(-1)?.notes.some((n) => n.includes("This run stops here.")), { requests: bodies.length, notes: runs.at(-1)?.notes })
+
+// The person's own prompt: not stopped, and it runs to the limit as before.
+;[r] = await session(["repeat"], ["go"], [commandsExt], { httpIdleTimeoutMs: 1200000 }, { linger: 200 })
+expect("the person's own prompt was stopped", bodies.length === 1 && r.aborted === false && r.stops[0] === "length" && !r.notes.some((n) => n.includes("repeating")), { requests: bodies.length, r })
+
 server.close()
 for (const f of fails) console.log(`FAIL  ${f}`)
 process.exit(fails.length ? 1 : 0)
 JS
 
 if node "$work/run.mjs" "$root" "$work"; then
-  printf 'live-loop: real Pi stops every loop it should and no other run, and a silent call follows the idle timeout\n'
+  printf 'live-loop: real Pi stops every loop it should and no other run, and a silent call follows the idle timeout, and a runaway reply is stopped and nudged\n'
   exit 0
 fi
 printf 'live-loop: case(s) failed\n' >&2
