@@ -66,10 +66,10 @@ await new Promise((r) => server.listen(0, "127.0.0.1", r))
 writeFileSync(`${work}/agent/models.json`, JSON.stringify({ providers: { mock: { baseUrl: `http://127.0.0.1:${server.address().port}/v1`, api: "openai-completions", apiKey: "x", models: [{ id: "m", name: "m", input: ["text"], contextWindow: 32768, maxTokens: 1024 }] } } }))
 
 // One Pi process, one prompt per entry: what each prompt's run did, up to agent_settled.
-const session = (steps, prompts = ["go"]) => new Promise((resolve) => {
+const session = (steps, prompts = ["go"], first = []) => new Promise((resolve) => {
   script = steps
   served = 0
-  const pi = spawn("pi", ["--mode", "rpc", "--no-session", "--no-extensions", "-e", `${root}/pi/guard.js`, "-e", `${root}/pi/edit.js`, "--model", "mock/m"], { cwd: proj, env: { ...process.env, PI_CODING_AGENT_DIR: `${work}/agent` }, stdio: ["pipe", "pipe", "ignore"] })
+  const pi = spawn("pi", ["--mode", "rpc", "--no-session", "--no-extensions", ...first.flatMap((e) => ["-e", e]), "-e", `${root}/pi/guard.js`, "-e", `${root}/pi/edit.js`, "--model", "mock/m"], { cwd: proj, env: { ...process.env, PI_CODING_AGENT_DIR: `${work}/agent` }, stdio: ["pipe", "pipe", "ignore"] })
   const runs = []
   const fresh = () => ({ tools: [], notes: [], aborted: null, retries: 0 })
   let run = fresh()
@@ -117,6 +117,15 @@ expect("the 13th call of that cycle was not refused", refused(r.tools[12] ?? { t
 // A valid call repeated: the third refusal ends the run through terminate, not abort.
 ;[r] = await session(["read"])
 expect("a read loop did not stop on the third refusal", r.tools.length === 5 && r.aborted === false && r.tools[4].text.includes("This run stops here."), { calls: r.tools.length, aborted: r.aborted, last: r.tools.at(-1)?.text })
+
+// Another extension refusing first: Pi stops at the first handler that blocks, so the guard's hook never runs,
+// as with a pi/commands.js step-gate refusal. It counts like a rejected call: repeating it is a loop too.
+const blocker = `${work}/blocker.mjs`
+writeFileSync(blocker, 'export default (pi) => pi.on("tool_call", () => ({ block: true, reason: "the gate refuses" }))\n')
+;[r] = await session(["read"], ["go"], [blocker])
+expect("another extension's refusal, repeated, did not stop on the 5th", r.tools.length === 5 && r.aborted === true, { calls: r.tools.length, aborted: r.aborted })
+expect("those refusals were not the other extension's", r.tools.every((t) => t.text === "the gate refuses"), r.tools[0])
+expect("that stop did not tell the user", r.notes.some((n) => n.includes("This run stops here.")), r.notes)
 
 // A dropped stream keeps the count. A new prompt clears it.
 let second
