@@ -252,6 +252,21 @@ answer = (res) => {
 r = await runReplay([file, "1"])
 expect("the same start as the log", r.line.sameStartAsLog === true && r.line.tool === "-" && r.line.argsValidJson === null && r.line.argsChars === 0, r.line)
 
+// A character split across two network chunks is still one character, and its event still parses.
+answer = (res) => {
+  stream(res)
+  const bytes = Buffer.from(chunk({ role: "assistant", content: "a — b" }))
+  const middle = bytes.indexOf(Buffer.from("—")) + 1
+  res.write(bytes.subarray(0, middle))
+  setTimeout(() => {
+    res.write(bytes.subarray(middle))
+    finished(res, "stop")
+  }, 100)
+}
+r = await runReplay([file, "1"])
+expect("a split character was corrupted", read(r.dir, "text.txt") === "a — b" && r.line.textChars === 5, read(r.dir, "text.txt"))
+expect("stream.log corrupted a split character", !read(r.dir, "stream.log").includes("\uFFFD"), read(r.dir, "stream.log").slice(0, 200))
+
 // Its own limit, not undici's: a silence past --limit exits 2 and keeps what came.
 answer = (res) => {
   stream(res)

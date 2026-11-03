@@ -243,6 +243,7 @@ function send(baseUrl, body, { dir, loggedText, limit }) {
       res.on("end", () => refuse(`the server answered ${res.statusCode}: ${answer.slice(0, 300)}`))
       return
     }
+    res.setEncoding("utf8") // A multibyte character can straddle two chunks.
     res.on("data", (d) => {
       const now = Date.now()
       firstByte ??= now
