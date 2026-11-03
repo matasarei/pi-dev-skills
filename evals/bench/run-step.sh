@@ -94,7 +94,7 @@ scenario resumed "$two" 2 stop,done 10 - 0 2
 [ -s "$d/logs/step-2-retry1.jsonl" ] || note "resumed: no step-2-retry1.jsonl"
 [ -s "$d/logs/step-2-retry1.stats.json" ] || note "resumed: no step-2-retry1.stats.json"
 
-# Unticked both times: it stops there, and the last attempt's exit is what's recorded.
+# Unticked both times: it stops there, with no third session.
 scenario still-unticked "$two" 2 stop,stop,done 10 - 0 2
 grep -q '2. \[ \]' "$d/proj/.tasks/plan.md" || note "still-unticked: a third session ran"
 
