@@ -15,7 +15,7 @@ Development skills for Pi Coding Agent, engineered for local ~30B models. These 
 | Build | none — no build system; shell scripts, SKILL.md files and two plain-JS Pi extensions |
 | Run | none — not a runtime application; the skills run as Pi commands |
 
-Commands run on the host system (no container). Ensure you have `gh`, `node` (the guard and expander suites load the extensions), `shellcheck`, Pi 1.4.0, and a model server at 64k or 128k; Docker is not needed here.
+Commands run on the host system (no container). Ensure you have `gh`, `node` (the guard and expander suites load the extensions), `shellcheck`, Pi 1.5.0, and a model server at 64k or 128k; Docker is not needed here.
 
 `pi/commands.js` passes the active model's `contextWindow` to `profile.sh` as `DEV_SKILLS_CONTEXT`, and `step-budget.sh` sizes each step against it: 1,572 lines at 128k, 786 at 64k, 393 at 32k. A 32k window does not carry implement → review → fix → pr in one context — see **What each window buys** in the README.
 

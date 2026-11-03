@@ -30,8 +30,8 @@ These skills are optimized for ~30B parameter local coding models:
 ## Installation & Setup
 
 ```bash
-# Pi 1.4.0, the version this package is tested with
-npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.4.0
+# Pi 1.5.0, the version this package is tested with
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.5.0
 
 git clone https://github.com/matasarei/pi-dev-skills.git
 pi install ./pi-dev-skills        # loaded from the checkout, not copied
@@ -40,7 +40,7 @@ pi install ./pi-dev-skills        # loaded from the checkout, not copied
 `pi install` with a local directory records its path in `~/.pi/agent/settings.json` and loads the package from there. There is nothing to sync after an edit: a changed `SKILL.md` or `lib/` script applies on the next command, and a changed `pi/*.js` after `/reload`. Add `-l` to install it for one project only (written to `.pi/settings.json`, loaded once the project is trusted).
 
 ### Requirements
-* **Pi 1.4.0** (Node.js 22.19 or newer).
+* **Pi 1.5.0** (Node.js 22.19 or newer).
 * **Git** and **Bash** (macOS, Linux, or WSL on Windows. Native Windows Git Bash is unsupported).
 * **GitHub CLI (`gh`)** for pull request skills (`gh auth login`).
 * **Docker** (recommended — skills run tests inside project containers by default).
