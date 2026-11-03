@@ -186,15 +186,17 @@ const load = () => {
   const handlers = {}
   mod.default({ on: (name, fn) => { handlers[name] = fn } })
   if (typeof handlers.tool_call !== "function") throw new Error("the extension registered no tool_call handler")
-  return (toolName, input, cwd = dir) => handlers.tool_call({ type: "tool_call", toolCallId: "t", toolName, input }, { cwd })
+  const fn = (toolName, input, cwd = dir) => handlers.tool_call({ type: "tool_call", toolCallId: "t", toolName, input }, { cwd })
+  fn.handlers = handlers
+  return fn
 }
 let call = load()
-// The verdict on one call: "2" refused, "0" allowed, "threw" for a throw.
+// The verdict on one call: "2" refused, "0" allowed, "threw" for a throw. Third, whether it ends the run.
 const verdict = async (toolName, input) => {
   try {
     const r = await call(toolName, input)
     if (r === undefined) return ["0", ""]
-    if (r?.block === true && typeof r.reason === "string" && r.reason.startsWith("dev-guard refuses:")) return ["2", r.reason]
+    if (r?.block === true && typeof r.reason === "string" && r.reason.startsWith("dev-guard refuses:")) return ["2", r.reason, r.terminate === true]
     return [`bad result ${JSON.stringify(r)}`, ""]
   } catch (e) { return ["threw", e.message] }
 }
@@ -270,6 +272,85 @@ if ((await verdict("read", { path: sample }))[0] !== "0") fail("reading a file w
 call = load()
 const loop = await Promise.all([0, 1, 2].map(() => verdict("read", { path: sample })))
 if (loop.map((v) => v[0]).join(",") !== "0,0,2") fail(`three identical reads were not refused on the third: ${loop.map((v) => v[0]).join(",")}`)
+// ...and its reason says to stop and report. "Next step" is a call the step gate refuses.
+if (loop[2][1].includes("next step") || !loop[2][1].includes("what blocks you")) fail(`the in-a-row refusal does not say to stop and report: ${loop[2][1]}`)
+// A short cycle: calls that repeat with something between them never reach three in a row.
+const reads = (n) => ["read", { path: sample, offset: n }]
+const test = () => ["bash", { command: "echo test" }]
+const inTurn = async (calls) => { const out = []; for (const [t, a] of calls) out.push(await verdict(t, a)); return out }
+const codes = (vs) => vs.map((v) => v[0]).join("")
+const times = (n, ...calls) => Array.from({ length: n }, () => calls).flat()
+call = load()
+const alternating = await inTurn(times(6, reads(1), test()))
+if (codes(alternating) !== "000000000002") fail(`two alternating calls were not refused on the 12th: ${codes(alternating)}`)
+if (!alternating[11][1].includes("what blocks you")) fail(`the cycle refusal does not say to stop and report: ${alternating[11][1]}`)
+// The cycle from the bench run: a test run three times, the third refused, then the same read.
+call = load()
+const logged = await inTurn(times(3, test(), test(), test(), reads(1)))
+if (codes(logged) !== "002000200022") fail(`the logged test, test, test, read cycle was not refused on the 12th: ${codes(logged)}`)
+// An edit in a cycle with a read is a cycle too: the edit rule alone sees no repeat in a row.
+call = load()
+const sameEdit = () => ["edit", { path: dummy, edits: [{ oldText: "absent", newText: "x" }] }]
+if (codes(await inTurn(times(6, sameEdit(), reads(1)))) !== "000000000002") fail("an edit alternating with a read was not refused on the 12th")
+// A real edit/test cycle is not a loop: each edit is different.
+call = load()
+const fixes = Array.from({ length: 12 }, (_, i) => [["edit", { path: dummy, edits: [{ oldText: "absent", newText: `fix ${i}` }] }], test()]).flat()
+if (/2/.test(codes(await inTurn(fixes)))) fail("an edit/test cycle with different edits was refused")
+// Neither is reading around.
+call = load()
+if (/2/.test(codes(await inTurn(Array.from({ length: 20 }, (_, i) => reads(i)))))) fail("twenty different reads were refused")
+// A refusal the model answers with something new has worked: that call, and the rerun after it, run.
+call = load()
+await inTurn(times(6, reads(1), test()))
+const recovered = await inTurn([["edit", { path: dummy, edits: [{ oldText: "absent", newText: "the fix" }] }], test()])
+if (codes(recovered) !== "00") fail(`a new call after a cycle refusal, or the rerun after it, was refused: ${codes(recovered)}`)
+// Refusing alone never stopped the bench's loop: the third repeat refusal ends the run.
+const stops = (vs) => vs.flatMap((v, i) => (v[2] ? [i + 1] : [])).join(",")
+call = load()
+const held = await inTurn(times(6, test()))
+if (codes(held) !== "002222" || stops(held) !== "5,6") fail(`the third in-a-row refusal did not end the run: ${codes(held)} stops at ${stops(held)}`)
+if (!held[4][1].includes("This run stops here.") || held[3][1].includes("This run stops here.")) fail(`only a refusal that ends the run says so: ${held[3][1]} / ${held[4][1]}`)
+// Calls 25 to 39 of the bench's step 2: it would have ended at 39, not at the timeout after 104.
+const [x, otherRead, oneRead, y] = [test(), reads(2), reads(3), reads(1)]
+call = load()
+const bench = await inTurn([x, x, otherRead, oneRead, x, x, x, y, x, x, x, y, x, x, x])
+if (codes(bench) !== "000000200020002" || stops(bench) !== "15") fail(`the logged calls 25-39 did not end on the last: ${codes(bench)} stops at ${stops(bench)}`)
+// The other two loop rules count as well.
+call = load()
+const cycling = await inTurn(times(7, reads(1), test()))
+if (codes(cycling) !== "00000000000222" || stops(cycling) !== "14") fail(`the third cycle refusal did not end the run: ${codes(cycling)} stops at ${stops(cycling)}`)
+call = load()
+const retried = await inTurn(times(5, sameEdit()))
+if (codes(retried) !== "02222" || stops(retried) !== "4,5") fail(`the third repeated-edit refusal did not end the run: ${codes(retried)} stops at ${stops(retried)}`)
+if (!retried[3][1].includes("oldText was not found")) fail(`the edit rule lost its own reason: ${retried[3][1]}`)
+// Other refusals are not loops: a model refused for several different commands keeps its run.
+call = load()
+const others = await inTurn(Array.from({ length: 5 }, (_, i) => ["bash", { command: `rm -f a${i}/package-lock.json` }]))
+if (codes(others) !== "22222" || stops(others) !== "") fail(`different refused commands counted as a loop: ${codes(others)} stops at ${stops(others)}`)
+// Old refusals expire: the stop counts three within 20 calls, so a long run may slip twice.
+const spread = async (between) => {
+  call = load()
+  await inTurn(times(4, reads(1)))
+  await inTurn(Array.from({ length: between }, (_, i) => reads(100 + i)))
+  return (await inTurn(times(3, test())))[2]
+}
+const near = await spread(16)
+if (near[0] !== "2" || !near[2]) fail("a third refusal 20 calls after the first did not end the run")
+const far = await spread(17)
+if (far[0] !== "2" || far[2]) fail("a third refusal 21 calls after the first ended the run")
+// A new prompt starts over: "try again" is not refused for what the last prompt did.
+call = load()
+await inTurn(times(4, reads(1)))
+call.handlers.before_agent_start?.()
+const fresh = await inTurn(times(3, reads(1)))
+if (codes(fresh) !== "002") fail(`a new prompt did not clear the call history: ${codes(fresh)}`)
+if (fresh[2][2]) fail("a new prompt did not clear the refusals: the first refusal after it ended the run")
+// A retry does not. Pi fires agent_start again for it, and a loop must not earn a clean slate from a dropped stream.
+call = load()
+await inTurn(times(4, reads(1)))
+call.handlers.agent_start?.()
+const retry = await inTurn([reads(1)])
+if (codes(retry) !== "2" || !retry[0][2]) fail(`a retry's agent_start cleared the loop: ${codes(retry)} stop ${retry[0][2]}`)
 process.exit(fails ? 1 : 0)
 JS
 

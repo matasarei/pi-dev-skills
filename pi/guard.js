@@ -21,7 +21,9 @@
 // most — an unescaped backslash in a grep pattern, a file passed to find as its
 // directory, a timeout in milliseconds where Pi wants seconds, line endings
 // that differ from the file — refuses to read a directory, and breaks a loop of
-// identical tool calls. Repairs change event.input in place, which Pi runs.
+// tool calls: three identical in a row, or a short cycle of them. The third such
+// refusal within 20 calls ends the run. Repairs change event.input in place,
+// which Pi runs.
 //
 // Quoted text is blanked first, so a commit message may mention a flag.
 // Everything else runs — gh pr create and gh pr ready included, which /dev-pr
@@ -39,6 +41,11 @@ import { join, dirname, resolve } from "node:path"
 
 const SEG = "[^|;&]*" // the rest of one command in a pipeline or chain
 const REFUSES = "dev-guard refuses: "
+const LOOP_WINDOW = 12
+const LOOP_DISTINCT = 3
+const LOOP_STOP_AT = 3 // repeat refusals that end the run...
+const LOOP_STOP_WITHIN = 20 // ...when they fall within this many calls
+const LOOP_ADVICE = "Running them again will not change the result. Stop calling tools and say in your answer what blocks you."
 
 // A branch name is a literal here, not a pattern: release.1 must not match release01.
 const literal = (s) => s.replace(/[^A-Za-z0-9_/-]/g, "\\$&")
@@ -304,6 +311,18 @@ export function checkConsecutiveCalls(callHistory, tool, args) {
   return count
 }
 
+// A short cycle: the newest calls are only a few different calls, each made more
+// than once. It catches what an in-a-row count cannot, a loop with something
+// between its repeats. A call made once in the window has not repeated, so
+// answering a refusal with something new lets that call, and the rerun after it, run.
+export function isShortCycle(callHistory) {
+  const recent = callHistory.slice(-LOOP_WINDOW)
+  if (recent.length < LOOP_WINDOW) return false
+  const counts = new Map()
+  for (const sig of recent) counts.set(sig, (counts.get(sig) ?? 0) + 1)
+  return counts.size <= LOOP_DISTINCT && [...counts.values()].every((n) => n >= 2)
+}
+
 // Make text use the file's line endings: CRLF when the file has them, LF otherwise.
 function matchLineEndings(text, crlf) {
   if (typeof text !== "string") return text
@@ -324,11 +343,20 @@ function fileText(path, cwd) {
 
 // One tool call, judged: { block: true, reason } to refuse it, undefined to let
 // it run. event.input may be repaired in place first.
-export function check(event, cwd, callHistory) {
+export function check(event, cwd, loop) {
   const tool = event?.toolName
   const input = event?.input
   if (!input || typeof input !== "object") return undefined
   const refuse = (reason) => ({ block: true, reason: REFUSES + reason })
+  const callHistory = loop.calls
+  loop.count++
+  // A model that keeps looping keeps ignoring the refusal, so the third ends the run.
+  const refuseRepeat = (reason) => {
+    loop.refusals = loop.refusals.filter((at) => loop.count - at <= LOOP_STOP_WITHIN)
+    loop.refusals.push(loop.count)
+    if (loop.refusals.length < LOOP_STOP_AT) return refuse(reason)
+    return { ...refuse(`${reason} This run stops here.`), terminate: true }
+  }
 
   // 1. Sanitize grep regex patterns to prevent fatal ripgrep crashes on unescaped
   //    backslashes. A literal search has no escapes to fix: its backslashes are text.
@@ -382,19 +410,19 @@ export function check(event, cwd, callHistory) {
       if (content !== null && edits.length) {
         const applied = edits.find((e) => typeof e?.newText === "string" && e.newText && content.includes(e.newText))
         if (applied && edits.every((e) => typeof e?.newText === "string" && e.newText && content.includes(e.newText))) {
-          return refuse(
+          return refuseRepeat(
             `"${applied.newText.trim().slice(0, 80)}" is already present in ${input.path}. ` +
             `This edit has already been applied. Do not retry; move on to the next file or task.`
           )
         }
         if (edits.some((e) => typeof e?.oldText === "string" && e.oldText && !content.includes(e.oldText))) {
-          return refuse(
+          return refuseRepeat(
             `oldText was not found in ${input.path} and this edit call was already attempted. ` +
             `Do not retry the exact same call; read the file with 'read' or 'sed' to verify its actual content, or proceed to the next file.`
           )
         }
       }
-      return refuse(
+      return refuseRepeat(
         `repeated identical edit call on ${input.path}. ` +
         `The previous call failed. Do not retry the exact same edit; inspect the file first or move on.`
       )
@@ -403,9 +431,13 @@ export function check(event, cwd, callHistory) {
 
   // 6. General tool call loop breaker (any tool repeated 3x consecutively with identical args)
   if (tool !== "edit" && checkConsecutiveCalls(callHistory, tool, input) >= 3) {
-    return refuse(
-      `repeated identical tool call detected (3x for ${tool}). ` +
-      `The previous calls did not produce a new state. Break this loop: inspect the file/environment or move on to the next step.`
+    return refuseRepeat(
+      `repeated identical tool call detected (3x for ${tool}). ${LOOP_ADVICE}`
+    )
+  }
+  if (isShortCycle(callHistory)) {
+    return refuseRepeat(
+      `the last ${LOOP_WINDOW} tool calls repeat ${LOOP_DISTINCT} or fewer different calls with nothing new between them. ${LOOP_ADVICE}`
     )
   }
 
@@ -428,6 +460,11 @@ export function check(event, cwd, callHistory) {
 
 export default function devGuard(pi) {
   // Per instance, not per module load: another instance's calls must not count.
-  const callHistory = []
-  pi.on("tool_call", async (event, ctx) => check(event, ctx?.cwd || process.cwd(), callHistory))
+  const fresh = () => ({ calls: [], refusals: [], count: 0 })
+  let loop = fresh()
+  // A new prompt starts over: "try again" is not refused for what the last prompt did.
+  // Not agent_start: Pi fires that for its own retries too, and a dropped stream
+  // must not wipe the count of a loop that is still going.
+  pi.on("before_agent_start", () => { loop = fresh() })
+  pi.on("tool_call", async (event, ctx) => check(event, ctx?.cwd || process.cwd(), loop))
 }

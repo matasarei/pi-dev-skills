@@ -58,6 +58,7 @@ for token in \
   'pi/expand.js' \
   'pi/edit.js' \
   'step-start.sh' \
+  '3 or fewer different calls' \
   'evals/pi/edit.sh' \
   'verify-clean.sh' \
   'Without CI, or without GitHub' \
