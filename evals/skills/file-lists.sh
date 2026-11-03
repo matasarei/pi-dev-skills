@@ -58,6 +58,9 @@ grep -q '^!`.*step-start.sh \$ARGUMENTS' "$impl" || note 'dev-implement: no step
 flat "$impl" | grep -q 'never run branch.sh' || note 'dev-implement: does not tell the model never to run branch.sh itself'
 flat "$impl" | grep -q 'test.sh --scoped <name>' || note 'dev-implement: the scoped test command is not spelled out'
 flat "$impl" | grep -q 'never cat them' || note 'dev-implement: no rule against reading the dev-lib scripts'
+# The bench's model built its own objects in new tests, and the file's setup was what made them work:
+# 11-13 tests failed for a reason its code could not fix, and they hid its one real bug.
+flat "$impl" | grep -q 'New tests use the setup their file already has' || note 'dev-implement: does not tell new tests to reuse their file'\''s setup'
 # Red first: the step's Red: test runs before any production line, and a test
 # that already passes stops the build. The import sentence it replaced was
 # PHP-only; lint and /dev-review C5 still catch a broken import.
