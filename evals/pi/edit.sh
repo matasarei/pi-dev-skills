@@ -64,6 +64,12 @@ if (!same(repairEditArgs({ path: "f", oldText: "a", newText: "b" }), { path: "f"
 const stray = editArgsProblem?.({ path: "f", edits: '[{"oldText": "a", "newText": "b"}]}]' }) ?? ""
 if (!/^edits is not valid JSON: .*position \d+/.test(stray) || !stray.includes("Fix the JSON, or use write.")) fails.push(`the stray bracket is not reported with its JSON error: ${stray}`)
 if (!(editArgsProblem?.({ path: "f", edits: "not json at all" }) ?? "").startsWith("edits is not valid JSON:")) fails.push("garbage is not reported")
+// Raw newlines are something the repair handles, so they are not what gets reported: the bench's model
+// was told about a control character when the real problem was a stray bracket further on.
+const both = editArgsProblem?.({ path: "f", edits: `[{"oldText": "a${NL}b", "newText": "c"}]}]` }) ?? ""
+if (both.includes("control character") || !/^edits is not valid JSON: .*position \d+/.test(both)) fails.push(`raw newlines hid the real JSON error: ${both}`)
+const quoted = editArgsProblem?.({ path: "f", edits: `"a${NL}b"` }) ?? ""
+if (!quoted.startsWith("edits is not a list of edits:")) fails.push(`a string with a raw newline is not reported as not a list: ${quoted}`)
 // Valid JSON that is not edits at all is reported too, without calling it invalid.
 const num = editArgsProblem?.({ path: "f", edits: "5" }) ?? ""
 if (!num.startsWith("edits is not a list of edits:") || !num.includes("Fix the JSON, or use write.")) fails.push(`a number is not reported: ${num}`)

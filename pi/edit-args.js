@@ -59,7 +59,7 @@ export function editArgsProblem(args) {
   if (!repaired || typeof repaired.edits !== "string") return null
   if (typeof repaired.oldText === "string" && typeof repaired.newText === "string") return null
   try {
-    JSON.parse(repaired.edits)
+    JSON.parse(escapeControlInStrings(repaired.edits)) // the repair copes with those, so they are not the problem
   } catch (e) {
     return `edits is not valid JSON: ${e.message}. Fix the JSON, or use write.`
   }
