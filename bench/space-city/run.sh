@@ -70,6 +70,13 @@ if [ "$harness" = pi ]; then
   [ "$(pi --version 2>/dev/null)" = "$PI_VERSION" ] || die "pi is $(pi --version 2>/dev/null), the pin is $PI_VERSION"
   pi list 2>/dev/null | grep -q "pi-dev-skills" || die "pi-dev-skills is not installed in Pi (pi install $root)"
   http_idle_ms="$(node "$here/idle-check.mjs")" || die "Pi's idle timeout would drop long tool calls, so the run would not measure the skills"
+  # Recorded, not pinned: a runaway tool call costs less at a lower limit, so a row depends on it.
+  max_tokens="$(node -e '
+    const { join } = require("node:path")
+    const dir = process.env.PI_CODING_AGENT_DIR || join(require("node:os").homedir(), ".pi", "agent")
+    const { providers } = JSON.parse(require("node:fs").readFileSync(join(dir, "models.json"), "utf8"))
+    console.log(Object.values(providers).flatMap((p) => p.models ?? []).find((m) => m.id === process.argv[1]).maxTokens ?? "unknown")
+  ' "$LMS_MODEL" 2>/dev/null)" || max_tokens=unknown
   harness_rev="$(git -C "$root" rev-parse --short HEAD)"
   git -C "$root" diff --quiet HEAD -- pi lib skills || harness_rev="$harness_rev+dirty"
 else
@@ -113,7 +120,7 @@ cp "$here/plan.md" "$proj/.tasks/funds.md"
 {
   printf 'harness=%s\nharness_rev=%s\nmodel=%s\ncontext=%s\nsteps=%s-%s\n' "$harness" "$harness_rev" "$MODEL" "$CONTEXT" "$first" "$last"
   printf 'target=%s\nimage=%s\n' "$SPACE_CITY_SHA" "$(docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE" 2>/dev/null)"
-  if [ "$harness" = pi ]; then printf 'http_idle_ms=%s\n' "$http_idle_ms"; fi
+  if [ "$harness" = pi ]; then printf 'http_idle_ms=%s\nmax_tokens=%s\n' "$http_idle_ms" "$max_tokens"; fi
 } > "$logs/meta.env"
 
 # --- the steps: one session each, and on Pi one more for a step left unticked -

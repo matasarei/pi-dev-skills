@@ -17,7 +17,9 @@ the same thing, and a difference between two rows is the harness, not the task.
 | OpenCode side | OpenCode 1.18.20 with opencode-skills at `9365f31`, the commit this repository was copied from | the installed files compared with that commit |
 
 Not pinned, so recorded instead: the `node:lts-alpine` image the profile runs tests in (its
-digest goes in `runs/<run>/meta.env`), and LM Studio's own version.
+digest goes in `runs/<run>/meta.env`), LM Studio's own version, and on Pi the model's `maxTokens`
+in `~/.pi/agent/models.json` (`max_tokens` in `meta.env`). A runaway tool call runs to that limit,
+so it changes what a row costs. Rows up to `pi@289fbc9` in `results.md` ran at 16384.
 
 The reference solution passes 26/26 hidden tests and all 34 existing ones; the untouched target
 passes none of the hidden ones. Both were checked when the benchmark was written.
