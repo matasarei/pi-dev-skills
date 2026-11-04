@@ -298,6 +298,22 @@ for broken in ' FAIL  tests/b.test.ts [ tests/b.test.ts ]' '  ● Test suite fai
   case "$(first)" in "TEST FAIL"*) ;; *) note "open beside '$broken': '$(first)'" ;; esac
 done
 rm -f "$work/broken.txt"
+# PHPUnit counts failures and errors in words of its own, and they have to be accounted for too.
+printf 'stuck_one\n' > "$open_list"
+php() { printf '#!/bin/sh\necho "1) Tests\\\\ATest::stuck_one"\necho "FAILURES! Tests: 3, Assertions: 3, %s."\nexit 1\n' "$1" > "$work/php.sh"; }
+profile '"sh ./php.sh"' null
+php 'Failures: 1, Errors: 1'
+run
+[ "$rc" -eq 1 ] || note "PHPUnit with a failure, an error and 1 name: exit $rc, want 1: '$(first)'"
+php 'Failures: 2'
+run
+[ "$rc" -eq 1 ] || note "PHPUnit with 2 failures and 1 name: exit $rc, want 1: '$(first)'"
+php 'Failures: 1'
+run
+[ "$rc" -eq 0 ] || note "PHPUnit with 1 failure and its name: exit $rc, want 0: '$(first)'"
+php 'Errors: 1'
+run
+[ "$rc" -eq 0 ] || note "PHPUnit with 1 error and its name: exit $rc, want 0: '$(first)'"
 # With no list, nothing changes.
 profile '"sh ./opener.sh"' '"sh ./opener.sh {name}"'
 rm -f "$open_list"

@@ -219,6 +219,11 @@ open_names() {
     /Test Suites:/ || /Test Files / { next }
     match($0, /(^|[^0-9])[1-9][0-9]* failed/) { c = substr($0, RSTART, RLENGTH); gsub(/[^0-9]/, "", c) }
     NF >= 2 && $(NF-1) == "fail" && $NF ~ /^[1-9][0-9]*$/ { c = $NF }
+    /Tests: *[1-9]/ {
+      f = 0
+      for (i = 1; i < NF; i++) if ($i == "Failures:" || $i == "Errors:") { v = $(i + 1); gsub(/[^0-9]/, "", v); f += v }
+      if (f) c = f
+    }
     END { print c }')"
   [ -z "$count" ] || [ "$count" -eq "$(printf '%s\n' "$names" | wc -l)" ] || return 1
   printf '%s\n' "$names" | while IFS= read -r name; do grep -qxF -- "$name" "$OPEN_LIST" || exit 1; done
