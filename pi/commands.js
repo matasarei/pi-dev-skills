@@ -150,10 +150,14 @@ const learnedOnly = (toolName, input) => {
   return parts.length > 0 && parts.every((p) => TEXT_TOOL.test(p) && LEARNED.test(p))
 }
 
+// Whether a command line runs lib/test-open.sh, as opposed to reading it or running its suite.
+const runsTestOpen = (command) =>
+  simpleCommands(command).some((p) => /^(?:(?:bash|sh)\s+)?["']?[^\s"']*test-open\.sh["']?(\s|$)/.test(p) && !p.includes("evals/"))
+
 export function gate(state, event, cwd) {
   const input = event.input ?? {}
   // Letting a step finish with a failing test is only for a step that's stuck.
-  if (event.toolName === "bash" && /test-open\.sh/.test(input.command ?? "") && (state?.failingRuns ?? 0) < OFFER_AT) {
+  if (event.toolName === "bash" && typeof input.command === "string" && runsTestOpen(input.command) && (state?.failingRuns ?? 0) < OFFER_AT) {
     return {
       block: true,
       reason: `${REFUSES}test-open.sh is for a /dev-implement step whose tests have failed ${OFFER_AT} runs. Keep working on the failure.`,

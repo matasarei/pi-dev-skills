@@ -61,6 +61,16 @@ if (gate(step(OFFER_AT), open, process.cwd())?.block) fails.push("test-open.sh w
 if (gate(step(0), { toolName: "bash", input: { command: "echo hello" } }, process.cwd())?.block) fails.push("another command was refused")
 if (gate(null, { toolName: "bash", input: { command: "echo hello" } }, process.cwd())?.block) fails.push("another command was refused outside a step")
 
+// Only running the script is refused: reading it, linting it and running its suite aren't.
+for (const command of ["cat lib/test-open.sh", "shellcheck lib/test-open.sh", "bash evals/lib/test-open.sh", "grep -n test-open.sh README.md", "git log -- lib/test-open.sh", 'echo "test-open.sh"']) {
+  for (const [what, state] of [["outside a step", null], ["in a step", step(0)]]) {
+    if (gate(state, { toolName: "bash", input: { command } }, process.cwd())?.block) fails.push(`${command} was refused ${what}`)
+  }
+}
+for (const command of ["bash lib/test-open.sh", "sh ./lib/test-open.sh", "lib/test-open.sh", "cd x && bash lib/test-open.sh", 'bash "${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/test-open.sh"', "bash $DEV_SKILLS_LIB/test-open.sh 2>&1 | tail -5"]) {
+  if (!gate(step(0), { toolName: "bash", input: { command } }, process.cwd())?.block) fails.push(`${command} was not refused`)
+}
+
 for (const f of fails) console.log(`FAIL  ${f}`)
 process.exit(fails.length ? 1 : 0)
 JS
