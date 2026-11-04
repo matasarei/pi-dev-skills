@@ -12,7 +12,7 @@
           "name": "Prism Bonsai 27B",
           "input": ["text", "image"],
           "contextWindow": 131072,
-          "maxTokens": 16384,
+          "maxTokens": 12288,
           "samplingParams": { "temperature": 0, "reasoning_effort": "none" }
         },
         {
