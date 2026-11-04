@@ -14,9 +14,10 @@ export const OFFER_AT = 5
 export const OFFER = `This step's tests have now failed ${OFFER_AT} runs. If what still fails is a test this step added, and you can't fix it, run: bash \${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/test-open.sh. It records that test as open, so the step can tick and commit. The test stays failing, and /dev-pr refuses until it passes, so name it in your report. It refuses a test that was there before. Don't use it to skip a fix you can make.`
 
 // The rules are failed_as_test's in lib/test.sh, plus vitest's name line, which a grep
-// keeps when it drops the count. An open test isn't a new failure.
+// keeps when it drops the count. An open test isn't a new failure, and a red run fails
+// on purpose.
 export function failedTestRun(text) {
-  if (typeof text !== "string" || /^TEST OPEN\b/.test(text)) return false
+  if (typeof text !== "string" || /^(TEST OPEN|RED )\b/.test(text)) return false
   let node = false
   let load = false
   for (const line of text.split("\n")) {

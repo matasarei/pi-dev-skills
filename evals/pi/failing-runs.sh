@@ -42,6 +42,9 @@ for (const [what, text] of [
   ["node's file that never loaded", "SyntaxError: Unexpected token\n✖ tests/a.test.js (26ms)\nℹ fail 1"],
   ["0 failed", "test result: ok. 3 passed; 0 failed; 0 ignored"],
   ["a test that is open", "TEST OPEN | Tests  1 failed | 47 passed (48) | open: its name\n FAIL  src/a.test.ts > its name"],
+  ["a red run, which fails on purpose", "RED PROVEN | Tests  1 failed (1)\n FAIL  src/a.test.ts > its name"],
+  ["a red run that isn't proven", "RED NOT PROVEN — the test passed before the change"],
+  ["an unclear red run", "RED UNCLEAR | Tests  1 failed (1)"],
   ["a read of a file", "export const failedLabel = 'not a run'\nit('should fail', () => {})"],
   ["a refusal", "dev-guard refuses: this project runs its tooling in a container"],
 ]) if (failedTestRun(text)) fails.push(`${what} was counted`)
