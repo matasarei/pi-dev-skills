@@ -21,10 +21,11 @@
 // most — an unescaped backslash in a grep pattern, a file passed to find as its
 // directory, a timeout in milliseconds where Pi wants seconds, line endings
 // that differ from the file — refuses to read a directory, and breaks a loop of
-// tool calls: three identical in a row, or a short cycle of them. The third such
-// repeat within 20 calls ends the run. Calls that fail Pi's validation count too,
-// though they never reach this hook: checkRejected sees them after the fact. Repairs
-// change event.input in place, which Pi runs.
+// tool calls: three identical in a row, a short cycle of them, or a write of what
+// the file already holds. The third such repeat within 20 calls ends the run. Calls
+// that fail Pi's validation count too, though they never reach this hook:
+// checkRejected sees them after the fact. Repairs change event.input in place, which
+// Pi runs.
 //
 // Quoted text is blanked first, so a commit message may mention a flag.
 // Everything else runs — gh pr create and gh pr ready included, which /dev-pr
@@ -462,6 +463,16 @@ export function check(event, cwd, loop) {
   if (isShortCycle(callHistory)) {
     return refuseRepeat(
       `the last ${LOOP_WINDOW} tool calls repeat ${LOOP_DISTINCT} or fewer different calls with nothing new between them. ${LOOP_ADVICE}`
+    )
+  }
+
+  // A write that changes nothing. Pi would answer "Successfully wrote", and the model
+  // takes that for the fix it announced but left out. After the rules above, so the
+  // call is in the history, and after the line endings repair, so this is what Pi would write.
+  if (tool === "write" && typeof input.content === "string" && fileText(input.path, cwd) === input.content) {
+    return refuseRepeat(
+      `${input.path} already has exactly this content, so this write changes nothing and anything that failed will fail the same way. ` +
+      `If you meant to change it, the change is not in what you wrote.`
     )
   }
 

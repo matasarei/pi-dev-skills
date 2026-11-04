@@ -323,6 +323,72 @@ call = load()
 const retried = await inTurn(times(5, sameEdit()))
 if (codes(retried) !== "02222" || stops(retried) !== "4,5") fail(`the third repeated-edit refusal did not end the run: ${codes(retried)} stops at ${stops(retried)}`)
 if (!retried[3][1].includes("oldText was not found")) fail(`the edit rule lost its own reason: ${retried[3][1]}`)
+// A write that changes nothing: Pi would answer "Successfully wrote", and the model takes that for its fix.
+const sameFile = `${dir}/same.txt`
+const sameText = "let x = 3;\n"
+writeFileSync(sameFile, sameText)
+const same = () => ["write", { path: sameFile, content: sameText }]
+call = load()
+const [noop, whyNoop, noopStops] = await verdict(...same())
+if (noop !== "2" || !whyNoop.includes("changes nothing") || !whyNoop.includes(sameFile) || noopStops) fail(`a write of the file's own content was not refused: ${noop} ${whyNoop}`)
+if (readFileSync(sameFile, "utf8") !== sameText) fail("a refused write changed the file")
+// It can't know a change was meant: one logged write only re-created a file the model thought was missing.
+if (!whyNoop.includes("If you meant to change it")) fail(`the refusal assumes a change was meant: ${whyNoop}`)
+// Anything that differs goes through, and so does anything with no file to compare with.
+writeFileSync(`${dir}/empty.txt`, "")
+for (const [what, input] of [
+  ["different content", { path: sameFile, content: "let x = 10;\n" }],
+  ["a missing trailing newline", { path: sameFile, content: "let x = 3;" }],
+  ["an extra trailing newline", { path: sameFile, content: "let x = 3;\n\n" }],
+  ["CRLF over an LF file", { path: sameFile, content: "let x = 3;\r\n" }],
+  ["a new file", { path: `${dir}/new.txt`, content: sameText }],
+  ["an empty write to a new file", { path: `${dir}/new-empty.txt`, content: "" }],
+  ["content to an empty file", { path: `${dir}/empty.txt`, content: sameText }],
+  ["a directory", { path: dir, content: sameText }],
+  ["content that isn't text", { path: sameFile, content: 5 }],
+]) {
+  call = load()
+  const [code, why] = await verdict("write", input)
+  if (code !== "0") fail(`${what} was refused as a write that changes nothing: ${code} ${why}`)
+}
+// An empty file written empty is as much of a no-op as any other.
+call = load()
+if ((await verdict("write", { path: `${dir}/empty.txt`, content: "" }))[0] !== "2") fail("an empty write to an empty file was not refused")
+// A relative path is the session's file, not the guard's.
+call = load()
+if ((await verdict("write", { path: "same.txt", content: sameText }))[0] !== "2") fail("a relative path was not compared with the file it names")
+call = load()
+if ((await call("write", { path: "same.txt", content: sameText }, "/")) !== undefined) fail("a relative path was compared outside the session's cwd")
+// The comparison is with what Pi would write: LF over a CRLF file becomes CRLF first, so this is a no-op too.
+call = load()
+if ((await verdict("write", { path: crlf, content: "first line\nsecond line\n" }))[0] !== "2") fail("LF over the same text in CRLF was not refused")
+// The logged loop: the same write, the filtered test, a read. It ends on the third write, not 32 replies later.
+call = load()
+const loggedWrites = await inTurn(times(3, same(), test(), reads(1)))
+if (codes(loggedWrites) !== "200200200" || stops(loggedWrites) !== "7") fail(`the logged write, test, read loop did not end on the third write: ${codes(loggedWrites)} stops at ${stops(loggedWrites)}`)
+if (!loggedWrites[6][1].includes("changes nothing") || !loggedWrites[6][1].includes("This run stops here.")) fail(`the stop lost the rule's reason: ${loggedWrites[6][1]}`)
+// Real writes between them don't excuse them.
+call = load()
+const between = await inTurn(times(3, same(), ["write", { path: sameFile, content: "let x = 10;\n" }]).slice(0, 5))
+if (codes(between) !== "20202" || stops(between) !== "5") fail(`real writes between no-op writes reset the count: ${codes(between)} stops at ${stops(between)}`)
+// The count doesn't look at the path: three different files already holding what's written end the run too.
+call = load()
+const paths = ["one.txt", "two.txt", "three.txt"]
+for (const path of paths) writeFileSync(`${dir}/${path}`, sameText)
+const manyPaths = await inTurn(paths.map((path) => ["write", { path, content: sameText }]))
+if (codes(manyPaths) !== "222" || stops(manyPaths) !== "3") fail(`no-op writes to different files did not share the count: ${codes(manyPaths)} stops at ${stops(manyPaths)}`)
+// A refused write is still in the history: three in a row is the breaker's refusal, which sees them.
+call = load()
+const inARow = await inTurn(times(3, same()))
+if (codes(inARow) !== "222" || !inARow[2][1].includes("3x for write")) fail(`refused writes did not reach the history: ${codes(inARow)} ${inARow[2][1]}`)
+// One now and then is not a loop: the stop only counts three within 20 calls.
+call = load()
+const apart = []
+for (let round = 0; round < 3; round++) {
+  apart.push(...await inTurn([same()]))
+  await inTurn(Array.from({ length: 21 }, (_, i) => reads(1000 * (round + 1) + i)))
+}
+if (codes(apart) !== "222" || stops(apart) !== "") fail(`no-op writes far apart ended the run: ${codes(apart)} stops at ${stops(apart)}`)
 // Other refusals are not loops: a model refused for several different commands keeps its run.
 call = load()
 const others = await inTurn(Array.from({ length: 5 }, (_, i) => ["bash", { command: `rm -f a${i}/package-lock.json` }]))
