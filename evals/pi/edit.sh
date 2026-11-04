@@ -60,6 +60,31 @@ if (r.edits !== "not json at all") fails.push(`garbage was changed: ${JSON.strin
 if (repairEditArgs(null) !== null) fails.push("null was not returned as given")
 if (!same(repairEditArgs({ path: "f", oldText: "a", newText: "b" }), { path: "f", oldText: "a", newText: "b" })) fails.push("legacy oldText/newText changed")
 
+// A repeated key: JSON.parse keeps the last value, so `"newText":"the fix","newText":""` deleted the text it was
+// replacing, and Pi reported success. In 18 logged repeats the later value was empty, null, identical or inside the first.
+for (const [what, later] of [["empty", '""'], ["null", "null"], ["identical", '"the fix"'], ["inside the first", '"fix"']]) {
+  r = repairEditArgs({ path: "f", edits: `[{"oldText": "a", "newText": "the fix", "newText": ${later}}]` })
+  if (!same(r.edits, [{ oldText: "a", newText: "the fix" }])) fails.push(`a repeated newText, later ${what}, did not keep the first: ${JSON.stringify(r.edits)}`)
+}
+r = repairEditArgs({ path: "f", edits: '[{"oldText": "a", "newText": "b", "oldText": null, "newText": null}]' })
+if (!same(r.edits, [{ oldText: "a", newText: "b" }])) fails.push(`a repeated oldText and newText did not keep the first: ${JSON.stringify(r.edits)}`)
+r = repairEditArgs({ path: "f", edits: `[{"oldText": "a${NL}b", "newText": "c${NL}d", "newText": ""}]` })
+if (!same(r.edits, [{ oldText: `a${NL}b`, newText: `c${NL}d` }])) fails.push(`a repeat with raw newlines did not keep the first: ${JSON.stringify(r.edits)}`)
+// Each edit in a list keeps its own, and the same key in another edit isn't a repeat.
+r = repairEditArgs({ path: "f", edits: '[{"oldText": "a", "newText": "b"}, {"oldText": "c", "newText": "d", "newText": ""}]' })
+if (!same(r.edits, [{ oldText: "a", newText: "b" }, { oldText: "c", newText: "d" }])) fails.push(`repeats across edits were mixed up: ${JSON.stringify(r.edits)}`)
+// A key that isn't an ordinary one stays data, and doesn't reach the object's prototype.
+r = repairEditArgs({ path: "f", edits: '[{"__proto__": {"x": 1}, "oldText": "a", "newText": "b"}]' })
+if (r.edits[0].x !== undefined || Object.getPrototypeOf(r.edits[0]) !== Object.prototype) fails.push("__proto__ in an edit changed its prototype")
+// Escapes in the text survive the reader.
+r = repairEditArgs({ path: "f", edits: '[{"oldText": "say \\"hi\\"", "newText": "tab\\tback\\\\slash \\u0041"}]' })
+if (!same(r.edits, [{ oldText: 'say "hi"', newText: `tab${TAB}back\\slash A` }])) fails.push(`escapes changed: ${JSON.stringify(r.edits)}`)
+// A later value that is real, different text is a guess either way: refused, in place of keeping the last.
+const differs = { path: "f", edits: '[{"oldText": "a", "newText": "one", "newText": "two"}]' }
+if (typeof repairEditArgs(differs).edits !== "string") fails.push("a repeat with different values was repaired")
+const twice = editArgsProblem?.(differs) ?? ""
+if (!twice.startsWith("edits gives newText twice with different values.") || !twice.includes("Fix the JSON, or use write.")) fails.push(`a repeat with different values was not reported: ${twice}`)
+
 // What cannot be repaired is reported with its real error, for the model to fix. The bench's stray bracket:
 const stray = editArgsProblem?.({ path: "f", edits: '[{"oldText": "a", "newText": "b"}]}]' }) ?? ""
 if (!/^edits is not valid JSON: .*position \d+/.test(stray) || !stray.includes("Fix the JSON, or use write.")) fails.push(`the stray bracket is not reported with its JSON error: ${stray}`)
@@ -85,6 +110,8 @@ if (piEdit) try {
     fails.push("through Pi's shim, the bench's shape does not come out as one {oldText, newText}")
   if (!same(prepare({ path: "f", edits: `{"oldText": "a${NL}b", "newText": "c"}` }).edits, [{ oldText: `a${NL}b`, newText: "c" }]))
     fails.push("through Pi's shim, a single object string is not wrapped in an array")
+  if (!same(prepare({ path: "f", edits: '[{"oldText": "a", "newText": "b", "newText": ""}]' }).edits, [{ oldText: "a", newText: "b" }]))
+    fails.push("through Pi's shim, a repeated newText does not keep the first")
   if (!same(prepare({ path: "f", oldText: "a", newText: "b" }).edits, [{ oldText: "a", newText: "b" }]))
     fails.push("through Pi's shim, legacy oldText/newText is no longer folded in")
   console.log("edit: checked through Pi's own edit shim too")
