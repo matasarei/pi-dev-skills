@@ -472,7 +472,7 @@ export function check(event, cwd, loop) {
   if (tool === "write" && typeof input.content === "string" && fileText(input.path, cwd) === input.content) {
     return refuseRepeat(
       `${input.path} already has exactly this content, so this write changes nothing and anything that failed will fail the same way. ` +
-      `The change you meant to make is not in what you wrote.`
+      `If you meant to change it, the change is not in what you wrote.`
     )
   }
 

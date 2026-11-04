@@ -332,6 +332,8 @@ call = load()
 const [noop, whyNoop, noopStops] = await verdict(...same())
 if (noop !== "2" || !whyNoop.includes("changes nothing") || !whyNoop.includes(sameFile) || noopStops) fail(`a write of the file's own content was not refused: ${noop} ${whyNoop}`)
 if (readFileSync(sameFile, "utf8") !== sameText) fail("a refused write changed the file")
+// It can't know a change was meant: one logged write only re-created a file the model thought was missing.
+if (!whyNoop.includes("If you meant to change it")) fail(`the refusal assumes a change was meant: ${whyNoop}`)
 // Anything that differs goes through, and so does anything with no file to compare with.
 writeFileSync(`${dir}/empty.txt`, "")
 for (const [what, input] of [
@@ -369,6 +371,12 @@ if (!loggedWrites[6][1].includes("changes nothing") || !loggedWrites[6][1].inclu
 call = load()
 const between = await inTurn(times(3, same(), ["write", { path: sameFile, content: "let x = 10;\n" }]).slice(0, 5))
 if (codes(between) !== "20202" || stops(between) !== "5") fail(`real writes between no-op writes reset the count: ${codes(between)} stops at ${stops(between)}`)
+// The count doesn't look at the path: three different files already holding what's written end the run too.
+call = load()
+const paths = ["one.txt", "two.txt", "three.txt"]
+for (const path of paths) writeFileSync(`${dir}/${path}`, sameText)
+const manyPaths = await inTurn(paths.map((path) => ["write", { path, content: sameText }]))
+if (codes(manyPaths) !== "222" || stops(manyPaths) !== "3") fail(`no-op writes to different files did not share the count: ${codes(manyPaths)} stops at ${stops(manyPaths)}`)
 // A refused write is still in the history: three in a row is the breaker's refusal, which sees them.
 call = load()
 const inARow = await inTurn(times(3, same()))
