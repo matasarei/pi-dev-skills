@@ -65,6 +65,8 @@ for token in \
   'evals/pi/live-loop.sh' \
   'evals/pi/edit.sh' \
   'verify-clean.sh' \
+  'test-open.sh' \
+  'TEST OPEN' \
   'Without CI, or without GitHub' \
   'ci+container' \
   'compare-url' \
