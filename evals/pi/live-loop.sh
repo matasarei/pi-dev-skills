@@ -21,6 +21,9 @@
 # the nudge and not the repeated text, because Pi leaves an aborted reply out of it,
 # and a run started from agent_settled really runs.
 #
+# A write of what the file already holds: the hook sees the content, the model sees
+# the refusal instead of Pi's "Successfully wrote", and the third one ends the run.
+#
 # Skips when Pi is not installed, which includes CI.
 # Exits 0 when every case holds, 1 otherwise, naming each failure.
 
@@ -51,7 +54,7 @@ let script = []
 let served = 0
 let bodies = []
 const chunk = (delta, finish = null) => `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 1, model: "m", choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`
-const calls = { broken: ["edit", { path: "notes.txt", edits: '[{"oldText": "hello", "newText": "bye"}]}]' }], read: ["read", { path: "notes.txt" }] }
+const calls = { broken: ["edit", { path: "notes.txt", edits: '[{"oldText": "hello", "newText": "bye"}]}]' }], read: ["read", { path: "notes.txt" }], write: ["write", { path: "written.txt", content: "let x = 3;\n" }] }
 // A tool call's name now and its arguments after a silence, or never: the output limit ends it.
 const SILENCE_MS = 3000
 // One line, over and over, until the client goes or the output limit would end it.
@@ -167,6 +170,18 @@ expect("the 13th call of that cycle was not refused", refused(r.tools[12] ?? { t
 // A valid call repeated: the third refusal ends the run through terminate, not abort.
 ;[r] = await session(["read"])
 expect("a read loop did not stop on the third refusal", r.tools.length === 5 && r.aborted === false && r.tools[4].text.includes("This run stops here."), { calls: r.tools.length, aborted: r.aborted, last: r.tools.at(-1)?.text })
+
+// The same write again: the first goes through, and each one after it changes nothing. The reads
+// keep them from being three in a row, which the breaker would answer first. The third refusal stops.
+;[r] = await session(["write", "write", "read", "write", "read", "write", "text"])
+expect("the no-op write loop did not make 6 calls", r.tools.length === 6 && r.aborted === false, { calls: r.tools.length, aborted: r.aborted })
+expect("the first write did not run", r.tools[0]?.text.startsWith("Successfully wrote") && !r.tools[0].isError, r.tools[0])
+expect("the wrong calls were refused", r.tools.map((t) => (refused(t) ? "x" : ".")).join("") === ".x.x.x", r.tools.map((t) => t.text.slice(0, 40)))
+expect("a no-op write's refusal was not a tool error", [1, 3, 5].every((i) => r.tools[i]?.isError && r.tools[i].text.includes("changes nothing")), r.tools[1])
+expect("only the third refusal ended the run", !r.tools[3]?.text.includes("This run stops here.") && r.tools[5]?.text.includes("This run stops here."), r.tools.map((t) => t.text.slice(-30)))
+expect("the model was not sent the refusal", String(bodies[2]?.messages.at(-1)?.content).startsWith("dev-guard refuses:"), bodies[2]?.messages.at(-1))
+expect("a request followed the stop", bodies.length === 6, bodies.length)
+expect("the writes left the wrong content", readFileSync(`${proj}/written.txt`, "utf8") === "let x = 3;\n", "changed")
 
 // Another extension refusing first: Pi stops at the first handler that blocks, so the guard's hook never runs,
 // as with a pi/commands.js step-gate refusal. It counts like a rejected call: repeating it is a loop too.
