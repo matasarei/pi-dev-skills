@@ -101,7 +101,7 @@ the target with the pinned lock file and a fresh install in the container, so a 
 `node_modules` still has its code scored. What it changed, the lock file included, is read from
 the original tree:
 
-- **Ticked** — steps marked `[x]` in the task file.
+- **Ticked** — steps marked `[x]` in the task file. A step can tick with a test it added left open (`lib/test-open.sh`), so this doesn't mean its tests pass. Rows up to `pi@8277145` had no such option.
 - **Step 1 / 2 / 3** — hidden tests passing, per step. A file that does not load scores 0.
 - **Other failing** — tests outside the hidden ones that fail, the 34 existing ones and the model's own.
 - **tsc** — `npx tsc --noEmit`.

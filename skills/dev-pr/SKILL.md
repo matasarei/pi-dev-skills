@@ -13,7 +13,7 @@ Everything you need is injected below by `pr-info.sh`: the base, the existing pu
 - `behind:` above 0 — somebody pushed to this branch; merging their work is not this skill's call.
 - `uncommitted:` above 0 — list them and stop. **Never commit on the developer's behalf.**
 - `commits: 0` — nothing to propose.
-- `tested:` is `none`, `stale`, or shows `TEST FAIL`/`TEST MISSING`/`TEST TIMEOUT` — the body would have to claim a check nobody ran. Say what it says and stop; `bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/test.sh` first, or `/dev-verify`.
+- `tested:` is `none`, `stale`, or shows `TEST FAIL`/`TEST OPEN`/`TEST MISSING`/`TEST TIMEOUT` — the body would have to claim a check nobody ran. Say what it says and stop; `bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/test.sh` first, or `/dev-verify`.
 - `red-planned:` names a test and `red:` is not that test's `RED PROVEN` — red first never happened, and cannot be proven once the code exists. Say what it says and stop.
 - `verification: local-only` and `clean:` is not a `CLEAN PASS` for **this HEAD** — stricter than `tested:` above: with no CI and no container it is the only check there is. Run `bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/verify-clean.sh`, then stop.
 - `gh:` not logged in or not installed, or `forge:` is not `github` — gh cannot open a change anywhere else. Write the title and body (step 3) to `.devskills/pr-body.md`, print them with the `compare-url:` line below, say nothing was created, stop.

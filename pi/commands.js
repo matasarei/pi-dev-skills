@@ -15,12 +15,16 @@
 // reply out of the next request, so the model gets a nudge and a clean context. It's
 // off for the person's own prompts: the nudge asks for a tool call, which only makes
 // sense in a step.
+//
+// It also counts a step's failing test runs (pi/failing-runs.js), and on the 5th tells
+// the model about lib/test-open.sh, which it refuses before then.
 
 import { execFileSync } from "node:child_process"
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { dirname, isAbsolute, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { description, expandSkill } from "./expand.js"
+import { failedTestRun, OFFER, OFFER_AT } from "./failing-runs.js"
 import { idleProblem, isLocalUrl } from "./idle-timeout.js"
 import { createWatch, NUDGE, STOP_AT } from "./runaway.js"
 
@@ -146,9 +150,33 @@ const learnedOnly = (toolName, input) => {
   return parts.length > 0 && parts.every((p) => TEXT_TOOL.test(p) && LEARNED.test(p))
 }
 
+// Whether a command line runs lib/test-open.sh, as opposed to reading it or running its suite.
+const runsTestOpen = (command) =>
+  simpleCommands(command).some((p) => /^(?:(?:bash|sh)\s+)?["']?[^\s"']*test-open\.sh["']?(\s|$)/.test(p) && !p.includes("evals/"))
+
+// Whether a call changes the list of open tests, as opposed to reading it. Written by
+// hand, it would skip both the wait and the check that the step added the test.
+const OPEN_LIST = /(^|[\s"'=/])\.devskills\/open-tests(?=$|[\s"'])/
+const READ_TOOL = /^(cat|grep|head|tail|wc|ls|diff)(\s|$)/
+const changesOpenList = (toolName, input) => {
+  if (toolName === "write" || toolName === "edit") return /(^|\/)\.devskills\/open-tests$/.test(input?.path ?? "")
+  if (toolName !== "bash" || typeof input?.command !== "string") return false
+  return simpleCommands(input.command).some((p) => OPEN_LIST.test(p) && (!READ_TOOL.test(p) || p.includes(">")))
+}
+
 export function gate(state, event, cwd) {
-  if (!state) return undefined
   const input = event.input ?? {}
+  if (changesOpenList(event.toolName, input)) {
+    return { block: true, reason: `${REFUSES}.devskills/open-tests is test-open.sh's list. Never change it by hand.` }
+  }
+  // Letting a step finish with a failing test is only for a step that's stuck.
+  if (event.toolName === "bash" && typeof input.command === "string" && runsTestOpen(input.command) && (state?.failingRuns ?? 0) < OFFER_AT) {
+    return {
+      block: true,
+      reason: `${REFUSES}test-open.sh is for a /dev-implement step whose tests have failed ${OFFER_AT} runs. Keep working on the failure.`,
+    }
+  }
+  if (!state) return undefined
   // Done first: once the step is finished, every refusal counts towards the end.
   if (stepDone(state, cwd)) {
     if (learnedOnly(event.toolName, input)) return undefined
@@ -213,6 +241,14 @@ export default function devCommands(pi) {
     watch = null
   })
   pi.on?.("tool_call", (event, ctx) => gate(state, event, ctx?.cwd || process.cwd()))
+  // The 5th failing test run of a step: the only place the model hears of test-open.sh.
+  pi.on?.("tool_result", (event) => {
+    if (!state || event.toolName !== "bash") return undefined
+    if (!failedTestRun((event.content ?? []).map((c) => c.text ?? "").join(""))) return undefined
+    state.failingRuns = (state.failingRuns ?? 0) + 1
+    if (state.failingRuns !== OFFER_AT) return undefined
+    return { content: [...event.content, { type: "text", text: `\n\n${OFFER}` }] }
+  })
   pi.on?.("before_agent_start", () => {
     if (armed) {
       armed = false
@@ -276,7 +312,7 @@ export default function devCommands(pi) {
           const at = stepOf(block)
           if (at) {
             const taskFile = isAbsolute(at.taskFile) ? at.taskFile : join(ctx.cwd, at.taskFile)
-            state = { ...at, taskFile, startHead: git(ctx.cwd, "rev-parse", "HEAD"), refusals: 0 }
+            state = { ...at, taskFile, startHead: git(ctx.cwd, "rev-parse", "HEAD"), refusals: 0, failingRuns: 0 }
           }
         }
         armed = true

@@ -16,11 +16,13 @@
 #
 #   TEST PASS | OK (43 tests, 118 assertions)
 #   TEST FAIL | FAILURES! Tests: 43, Assertions: 118, Failures: 1.
+#   TEST OPEN | Tests  1 failed | 47 passed (48) | open: its name
 #   TEST MISSING — no test command in the profile; this repository may have none
 #   TEST TIMEOUT — no result after 600s; a hang is a failure, not a slow pass
 #
 # On anything but PASS the runner's last 20 lines follow, so the failure can be
-# read without running it again. Exit 0 pass, 1 fail or timeout, 2 nothing ran.
+# read without running it again. Exit 0 pass or open, 1 fail or timeout, 2 nothing
+# ran. Open means only tests test-open.sh recorded fail: not a pass, and /dev-pr refuses.
 #
 # The verdict is also written to .devskills/test-result as "<HEAD sha> <verdict>",
 # so /dev-pr can tell whether anything was actually run for the code it is about
@@ -104,6 +106,12 @@ out="$(
   fi
 )"
 rc=$?
+
+OPEN_LIST=.devskills/open-tests
+
+# The whole output, for test-open.sh: below a verdict only its tail is shown, and
+# it has to read every failing name. A red run fails on purpose, so it doesn't count.
+[ -z "$RED" ] && mkdir -p .devskills 2>/dev/null && printf '%s\n' "$out" > .devskills/test-output 2>/dev/null
 
 # The runner's own summary, searched for from the end: the last line is often a
 # blank or a coverage footer, and "tests pass" is not evidence of anything.
@@ -193,6 +201,38 @@ if [ "$rc" -eq 0 ]; then
   verdict="TEST PASS | $summary$([ -z "$TIMEOUT" ] && printf ' [unbounded: no timeout tool on this host]')"
   printf '%s\n' "$verdict"
   receipt "$verdict"
+  # A full pass means an open test has been fixed. A scoped one says nothing about it.
+  [ -z "$SCOPED" ] && rm -f "$OPEN_LIST"
+  exit 0
+fi
+
+# Every failure is a test test-open.sh recorded: not a pass, and not what's new.
+# The names have to account for the runner's own count, so a failure with no name
+# beside an open one is a failure.
+open_names() {
+  [ -s "$OPEN_LIST" ] && failed_as_test || return 1
+  # A file that never loaded isn't in the runner's test count, so nothing below would see it.
+  printf '%s\n' "$out" | grep -qE '^[[:space:]]*FAIL[[:space:]].*\[ .* \]|Test suite failed to run|^ERROR |\[build failed\]|SyntaxError:|Cannot find module|MODULE_NOT_FOUND|Failed to resolve import' && return 1
+  names="$(printf '%s\n' "$out" | bash "$HERE/test-open.sh" --names)"
+  [ -n "$names" ] || return 1
+  count="$(printf '%s\n' "$out" | awk '
+    /Test Suites:/ || /Test Files / { next }
+    match($0, /(^|[^0-9])[1-9][0-9]* failed/) { c = substr($0, RSTART, RLENGTH); gsub(/[^0-9]/, "", c) }
+    NF >= 2 && $(NF-1) == "fail" && $NF ~ /^[1-9][0-9]*$/ { c = $NF }
+    /Tests: *[1-9]/ {
+      f = 0
+      for (i = 1; i < NF; i++) if ($i == "Failures:" || $i == "Errors:") { v = $(i + 1); gsub(/[^0-9]/, "", v); f += v }
+      if (f) c = f
+    }
+    END { print c }')"
+  [ -z "$count" ] || [ "$count" -eq "$(printf '%s\n' "$names" | wc -l)" ] || return 1
+  printf '%s\n' "$names" | while IFS= read -r name; do grep -qxF -- "$name" "$OPEN_LIST" || exit 1; done
+}
+if open_names; then
+  verdict="TEST OPEN | $summary | open: $(printf '%s\n' "$names" | paste -sd, - | sed 's/,/, /g')"
+  printf '%s\n' "$verdict"
+  receipt "$verdict"
+  printf '%s\n' "$out" | tail -20
   exit 0
 fi
 

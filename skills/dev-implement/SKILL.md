@@ -39,7 +39,7 @@ Run the step's `Check:` command, then:
 bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/test.sh
 ```
 
-**Quote its verdict line**: it carries the runner's summary and already chose and bounded the run. `TEST FAIL` → fix, re-run, **at most three rounds**, then report. `TEST MISSING` is not a pass. `exec.kind: host` → say results are against host.
+**Quote its verdict line**: it carries the runner's summary and already chose and bounded the run. `TEST FAIL` → fix, re-run, **at most three rounds**, then report. `TEST MISSING` and `TEST OPEN` are not a pass: name it. `exec.kind: host` → say results are against host.
 
 ## Step 4 — Tick and commit
 

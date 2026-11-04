@@ -217,6 +217,13 @@ case "$(say_tested)" in
 esac
 
 # A receipt for a commit that is not behind HEAD is stale, never a pass.
+# An open test isn't a pass, and /dev-pr reads this line to stop on it.
+printf '%s TEST OPEN | Tests  1 failed | open: its name\n' "$(g rev-parse HEAD)" > "$repo/.devskills/test-result"
+run
+case "$(printf '%s\n' "$out" | sed -n 's/^tested: //p')" in
+  "TEST OPEN | Tests  1 failed | open: its name (this HEAD)") ;;
+  *) note "tested: an open test is not shown: '$(printf '%s\n' "$out" | sed -n 's/^tested: //p')'" ;;
+esac
 printf '%s TEST PASS | OK\n' "0000000000000000000000000000000000000000" > "$repo/.devskills/test-result"
 run
 case "$(say_tested)" in
