@@ -22,7 +22,7 @@
 // directory, a timeout in milliseconds where Pi wants seconds, line endings
 // that differ from the file — refuses to read a directory, and breaks a loop of
 // tool calls: three identical in a row, a short cycle of them, or a write of what
-// the file already holds. The third such repeat within 20 calls ends the run. Calls
+// the file already holds. The third such repeat within 40 calls ends the run. Calls
 // that fail Pi's validation count too, though they never reach this hook:
 // checkRejected sees them after the fact. Repairs change event.input in place, which
 // Pi runs.
@@ -46,7 +46,7 @@ const REFUSES = "dev-guard refuses: "
 const LOOP_WINDOW = 12
 const LOOP_DISTINCT = 3
 const LOOP_STOP_AT = 3 // repeat refusals that end the run...
-const LOOP_STOP_WITHIN = 20 // ...when they fall within this many calls
+const LOOP_STOP_WITHIN = 40 // ...when they fall within this many calls: a short cycle only refuses again after 12 fresh calls, so three refusals with anything between them span 26 or more
 const LOOP_ADVICE = "Running them again will not change the result. Stop calling tools and say in your answer what blocks you."
 
 // A branch name is a literal here, not a pattern: release.1 must not match release01.
