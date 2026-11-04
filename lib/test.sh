@@ -105,6 +105,10 @@ out="$(
 )"
 rc=$?
 
+# The whole output, for test-open.sh: below a verdict only its tail is shown, and
+# it has to read every failing name. A red run fails on purpose, so it doesn't count.
+[ -z "$RED" ] && mkdir -p .devskills 2>/dev/null && printf '%s\n' "$out" > .devskills/test-output 2>/dev/null
+
 # The runner's own summary, searched for from the end: the last line is often a
 # blank or a coverage footer, and "tests pass" is not evidence of anything.
 # node --test prints its counts on separate lines, so neither alone is a summary
