@@ -211,6 +211,8 @@ fi
 # beside an open one is a failure.
 open_names() {
   [ -s "$OPEN_LIST" ] && failed_as_test || return 1
+  # A file that never loaded isn't in the runner's test count, so nothing below would see it.
+  printf '%s\n' "$out" | grep -qE '^[[:space:]]*FAIL[[:space:]].*\[ .* \]|Test suite failed to run|^ERROR |\[build failed\]|SyntaxError:|Cannot find module|MODULE_NOT_FOUND|Failed to resolve import' && return 1
   names="$(printf '%s\n' "$out" | bash "$HERE/test-open.sh" --names)"
   [ -n "$names" ] || return 1
   count="$(printf '%s\n' "$out" | awk '

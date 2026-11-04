@@ -286,6 +286,18 @@ printf '#!/bin/sh\necho " FAIL  tests/a.test.ts > stuck one"\necho "Error: Faile
 profile '"sh ./load.sh"' null
 run
 case "$(first)" in "TEST OPEN"*) note "a file that never loaded read as open: '$(first)'" ;; esac
+# Beside an open test, another file that never loaded is hidden from the count: the
+# runner's "1 failed" is the open test's. Each runner's way of saying so.
+printf 'stuck one\n' > "$open_list"
+for broken in ' FAIL  tests/b.test.ts [ tests/b.test.ts ]' '  ● Test suite failed to run' 'ERROR tests/test_b.py' 'FAIL	example.com/b [build failed]' 'SyntaxError: Unexpected token'; do
+  printf '%s\n' "$broken" > "$work/broken.txt"
+  printf '#!/bin/sh\necho " FAIL  tests/a.test.ts > stuck one"\ncat ./broken.txt\necho "Tests  1 failed | 1 passed"\nexit 1\n' > "$work/beside.sh"
+  profile '"sh ./beside.sh"' null
+  run
+  [ "$rc" -eq 1 ] || note "open beside '$broken': exit $rc, want 1"
+  case "$(first)" in "TEST FAIL"*) ;; *) note "open beside '$broken': '$(first)'" ;; esac
+done
+rm -f "$work/broken.txt"
 # With no list, nothing changes.
 profile '"sh ./opener.sh"' '"sh ./opener.sh {name}"'
 rm -f "$open_list"
