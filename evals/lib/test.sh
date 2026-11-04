@@ -249,6 +249,58 @@ if [ -d "$work/.git" ]; then
   [ -f "$work/.devskills/red-result" ] && note 'red receipt: a refused name wrote a receipt'
 fi
 
+# An open test: test-open.sh records one a step added and can't fix. It stays failing,
+# and the verdict says so instead of holding up the next step or reading as a pass.
+cat > "$work/opener.sh" <<'SH'
+while IFS= read -r name; do echo " FAIL  tests/a.test.ts > $name"; done < "$(dirname "$0")/failing.txt"
+count="$(wc -l < "$(dirname "$0")/failing.txt" | tr -d ' ')"
+[ "$count" -gt 0 ] || { echo "Tests  3 passed (3)"; exit 0; }
+echo "Tests  $count failed | 1 passed"
+exit 1
+SH
+profile '"sh ./opener.sh"' '"sh ./opener.sh {name}"'
+open_list="$work/.devskills/open-tests"
+printf 'stuck one\n' > "$open_list"
+printf 'stuck one\n' > "$work/failing.txt"
+run
+[ "$rc" -eq 0 ] || note "open: exit $rc, want 0"
+case "$(first)" in "TEST OPEN | Tests  1 failed | 1 passed | open: stuck one"*) ;; *) note "open: '$(first)'" ;; esac
+printf '%s\n' "$out" | grep -q 'FAIL  tests/a.test.ts' || note 'open: the failure is not shown below the verdict'
+cut -d' ' -f2- "$work/.devskills/test-result" 2>/dev/null | grep -q '^TEST OPEN' || [ ! -d "$work/.git" ] || note 'open: the receipt does not say TEST OPEN'
+# One more failure beside it is a real failure.
+printf 'stuck one\nanother\n' > "$work/failing.txt"
+run
+[ "$rc" -eq 1 ] || note "open and another: exit $rc, want 1"
+case "$(first)" in "TEST FAIL"*) ;; *) note "open and another: '$(first)'" ;; esac
+# More failures than names read: one of them is something else, so it can't be called open.
+cat > "$work/hidden.sh" <<'SH'
+echo " FAIL  tests/a.test.ts > stuck one"
+echo "Tests  2 failed | 1 passed"
+exit 1
+SH
+profile '"sh ./hidden.sh"' null
+run
+[ "$rc" -eq 1 ] || note "a failure with no name beside an open one: exit $rc, want 1"
+# A file that never loaded isn't a failing test, whatever the list says.
+printf '#!/bin/sh\necho " FAIL  tests/a.test.ts > stuck one"\necho "Error: Failed to resolve import"\necho "Tests  no tests"\nexit 1\n' > "$work/load.sh"
+profile '"sh ./load.sh"' null
+run
+case "$(first)" in "TEST OPEN"*) note "a file that never loaded read as open: '$(first)'" ;; esac
+# With no list, nothing changes.
+profile '"sh ./opener.sh"' '"sh ./opener.sh {name}"'
+rm -f "$open_list"
+printf 'stuck one\n' > "$work/failing.txt"
+run
+case "$(first)" in "TEST FAIL"*) ;; *) note "no list: '$(first)'" ;; esac
+# A scoped pass says nothing about the rest, and a full pass empties the list.
+printf 'stuck one\n' > "$open_list"
+: > "$work/failing.txt"
+run --scoped other
+[ -s "$open_list" ] || note 'a scoped pass emptied the list'
+run
+case "$(first)" in "TEST PASS"*) ;; *) note "open, then passing: '$(first)'" ;; esac
+[ -e "$open_list" ] && note 'a full pass did not empty the list'
+
 if [ "$fails" -eq 0 ]; then
   printf 'test: pass, fail, missing, scoped, timeout and red each get their verdict line\n'
 else
