@@ -20,6 +20,9 @@
 # An edit in the shapes the model really sends, a repeated newText and stray closers:
 # pi/edit.js repairs them before Pi validates them, and the file gets the first text.
 #
+# A step's 5th failing test run: the model sees the note in that tool result, through
+# Pi's tool_result hook, and test-open.sh is refused until then.
+#
 # A runaway reply, stopped mid-stream during a /dev-* command: the next request has
 # the nudge and not the repeated text, because Pi leaves an aborted reply out of it,
 # and a run started from agent_settled really runs.
@@ -44,9 +47,9 @@ trap 'rm -rf "$work"' EXIT INT TERM
 mkdir -p "$work/agent" "$work/proj"
 
 cat > "$work/run.mjs" <<'JS'
-import { spawn } from "node:child_process"
+import { execFileSync, spawn } from "node:child_process"
 import { createServer } from "node:http"
-import { readFileSync, writeFileSync } from "node:fs"
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { createInterface } from "node:readline"
 const [root, work] = process.argv.slice(2)
 const proj = `${work}/proj`
@@ -251,6 +254,28 @@ expect("a run that keeps repeating did not stop after 3", bodies.length === 3 &&
 // The person's own prompt: not stopped, and it runs to the limit as before.
 ;[r] = await session(["repeat"], ["go"], [commandsExt], { httpIdleTimeoutMs: 1200000 }, { linger: 200 })
 expect("the person's own prompt was stopped", bodies.length === 1 && r.aborted === false && r.stops[0] === "length" && !r.notes.some((n) => n.includes("repeating")), { requests: bodies.length, r })
+
+// A stuck step: the 5th failing test run carries the offer, once, and test-open.sh waits for it.
+const offer = "This step's tests have now failed"
+for (const i of [1, 2, 3, 4, 5, 6]) calls[`failing${i}`] = ["bash", { command: `printf 'run ${i}\\nTests  1 failed | 1 passed\\n'; exit 1` }]
+calls.opener = ["bash", { command: 'bash "$DEV_SKILLS_LIB/test-open.sh"' }]
+const git = (...args) => execFileSync("git", args, { cwd: proj, stdio: "ignore" })
+git("init", "-q", "-b", "main")
+git("config", "user.email", "t@example.com")
+git("config", "user.name", "t")
+mkdirSync(`${proj}/.tasks`, { recursive: true })
+writeFileSync(`${proj}/.tasks/t.md`, "# A task\n\n## Acceptance criteria\n- [ ] it works\n\n## Steps\n1. [ ] Do it\n   - Create: a.txt\n   - Modify: none\n   - Test: none\n")
+writeFileSync(`${proj}/.gitignore`, ".tasks/\n.devskills/\n.pi/\n")
+git("add", ".")
+git("commit", "-qm", "base")
+;[r] = await session(["opener", "failing1", "failing2", "failing3", "failing4", "failing5", "opener", "failing6", "text"], ["/dev-implement .tasks/t.md"], [commandsExt], { httpIdleTimeoutMs: 1200000 })
+expect("the step did not run", r.tools.length === 8, r.tools)
+expect("test-open.sh was not refused before the 5th", refused(r.tools[0] ?? { text: "" }), r.tools[0])
+const toolMessages = (bodies.at(-1)?.messages ?? []).filter((m) => m.role === "tool").map((m) => JSON.stringify(m.content))
+expect("the model did not get every tool result", toolMessages.length === 8, toolMessages.length)
+expect("the offer is on the wrong result", toolMessages.map((m) => m.includes(offer)).join() === "false,false,false,false,false,true,false,false", toolMessages.map((m) => m.includes(offer)))
+expect("the result lost its own text beside the offer", toolMessages[5]?.includes("run 5") && toolMessages[5]?.includes("1 failed"), toolMessages[5])
+expect("test-open.sh was refused on and after the 5th", !refused(r.tools[6] ?? { text: "dev-guard refuses:" }) && r.tools[6]?.text.startsWith("OPEN REFUSED"), r.tools[6])
 
 server.close()
 for (const f of fails) console.log(`FAIL  ${f}`)
