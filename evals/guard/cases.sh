@@ -381,29 +381,42 @@ if (codes(manyPaths) !== "222" || stops(manyPaths) !== "3") fail(`no-op writes t
 call = load()
 const inARow = await inTurn(times(3, same()))
 if (codes(inARow) !== "222" || !inARow[2][1].includes("3x for write")) fail(`refused writes did not reach the history: ${codes(inARow)} ${inARow[2][1]}`)
-// One now and then is not a loop: the stop only counts three within 20 calls.
+// One now and then is not a loop: the stop only counts three within 40 calls.
 call = load()
 const apart = []
 for (let round = 0; round < 3; round++) {
   apart.push(...await inTurn([same()]))
-  await inTurn(Array.from({ length: 21 }, (_, i) => reads(1000 * (round + 1) + i)))
+  await inTurn(Array.from({ length: 41 }, (_, i) => reads(1000 * (round + 1) + i)))
 }
 if (codes(apart) !== "222" || stops(apart) !== "") fail(`no-op writes far apart ended the run: ${codes(apart)} stops at ${stops(apart)}`)
 // Other refusals are not loops: a model refused for several different commands keeps its run.
 call = load()
 const others = await inTurn(Array.from({ length: 5 }, (_, i) => ["bash", { command: `rm -f a${i}/package-lock.json` }]))
 if (codes(others) !== "22222" || stops(others) !== "") fail(`different refused commands counted as a loop: ${codes(others)} stops at ${stops(others)}`)
-// Old refusals expire: the stop counts three within 20 calls, so a long run may slip twice.
+// A short cycle refuses again only after 12 fresh calls, so a model that makes anything new after each refusal
+// spaces them out. In the logged run, 2 new calls gave 17 refusals and no stop, until the 30-minute limit.
+const varied = async (news) => {
+  call = load()
+  const between = Array.from({ length: news }, (_, i) => reads(2 + i))
+  const vs = await inTurn([...times(6, reads(1), test()), ...times(2, ...between, ...times(6, reads(1), test()))])
+  return [vs.flatMap((v, i) => (v[0] === "2" ? [i + 1] : [])).join(","), stops(vs), vs.at(-1)[1] ?? ""]
+}
+for (const [news, refused, stop] of [[1, "12,25,38", "38"], [2, "12,26,40", "40"], [8, "12,32,52", "52"], [9, "12,33,54", ""]]) {
+  const [at, stoppedAt, why] = await varied(news)
+  if (at !== refused || stoppedAt !== stop) fail(`${news} new call(s) after each cycle refusal: refused at ${at}, stops at ${stoppedAt}, wanted ${refused} and ${stop}`)
+  if (stop && !why.includes("This run stops here.")) fail(`the varied cycle's stop did not say so: ${why}`)
+}
+// Old refusals expire: the stop counts three within 40 calls, so a long run may slip twice.
 const spread = async (between) => {
   call = load()
   await inTurn(times(4, reads(1)))
   await inTurn(Array.from({ length: between }, (_, i) => reads(100 + i)))
   return (await inTurn(times(3, test())))[2]
 }
-const near = await spread(16)
-if (near[0] !== "2" || !near[2]) fail("a third refusal 20 calls after the first did not end the run")
-const far = await spread(17)
-if (far[0] !== "2" || far[2]) fail("a third refusal 21 calls after the first ended the run")
+const near = await spread(36)
+if (near[0] !== "2" || !near[2]) fail("a third refusal 40 calls after the first did not end the run")
+const far = await spread(37)
+if (far[0] !== "2" || far[2]) fail("a third refusal 41 calls after the first ended the run")
 // A new prompt starts over: "try again" is not refused for what the last prompt did.
 call = load()
 await inTurn(times(4, reads(1)))
@@ -492,8 +505,8 @@ const spreadFailed = async (between) => {
   rejectedTimes(ctx, 3, brokenEdit(9))
   return ctx.aborts
 }
-if ((await spreadFailed(16)) !== 1) fail("a third hit 20 calls after the first did not abort the run")
-if ((await spreadFailed(17)) !== 0) fail("a third hit 21 calls after the first aborted the run")
+if ((await spreadFailed(36)) !== 1) fail("a third hit 40 calls after the first did not abort the run")
+if ((await spreadFailed(37)) !== 0) fail("a third hit 41 calls after the first aborted the run")
 // A new prompt clears it, and a retry does not.
 call = load()
 ctx = session()
