@@ -85,6 +85,12 @@ grep -q 'seven `dev-` commands' "$readme" && note 'README still counts seven com
 grep -q 'Six of the eight skills' "$readme" && note 'README still counts eight skills; dev-plan-manual makes nine'
 grep -q 'REVIEW.md' "$readme" && note 'README still names REVIEW.md at the root'
 
+# The README shows one model's settings: they have to be the ones the file it says to copy holds.
+limit_in() { awk '/prism-ml\/bonsai-27b/ { found = 1 } found && /"maxTokens"/ { gsub(/[^0-9]/, ""); print; exit }' "$1"; }
+shown="$(limit_in "$readme")"
+copied="$(limit_in "$root/models.example.json")"
+[ -n "$shown" ] && [ "$shown" = "$copied" ] || note "README shows maxTokens ${shown:-nothing} for bonsai-27b, models.example.json has ${copied:-nothing}"
+
 if [ "$fails" -eq 0 ]; then
   printf 'readme: describes every mechanic the skills rely on\n'
 else
