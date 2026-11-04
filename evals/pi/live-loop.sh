@@ -17,6 +17,9 @@
 # in the README and in the bench's preflight rests on this, so a new pin re-tests it.
 # And that the warning in pi/commands.js sees what Pi really hands an extension.
 #
+# An edit in the shapes the model really sends, a repeated newText and stray closers:
+# pi/edit.js repairs them before Pi validates them, and the file gets the first text.
+#
 # A runaway reply, stopped mid-stream during a /dev-* command: the next request has
 # the nudge and not the repeated text, because Pi leaves an aborted reply out of it,
 # and a run started from agent_settled really runs.
@@ -54,7 +57,7 @@ let script = []
 let served = 0
 let bodies = []
 const chunk = (delta, finish = null) => `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 1, model: "m", choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`
-const calls = { broken: ["edit", { path: "notes.txt", edits: '[{"oldText": "hello", "newText": "bye' }], read: ["read", { path: "notes.txt" }], write: ["write", { path: "written.txt", content: "let x = 3;\n" }] }
+const calls = { broken: ["edit", { path: "notes.txt", edits: '[{"oldText": "hello", "newText": "bye' }], repeated: ["edit", { path: "notes.txt", edits: '[{"oldText": "hello", "newText": "bye", "newText": ""}]' }], closers: ["edit", { path: "notes.txt", edits: '[{"oldText": "hello", "newText": "bye"}]}]' }], read: ["read", { path: "notes.txt" }], write: ["write", { path: "written.txt", content: "let x = 3;\n" }] }
 // A tool call's name now and its arguments after a silence, or never: the output limit ends it.
 const SILENCE_MS = 3000
 // One line, over and over, until the client goes or the output limit would end it.
@@ -157,6 +160,16 @@ expect("broken edits did not stop on the 5th", r.tools.length === 5 && r.aborted
 expect("the stop did not tell the user", r.notes.some((n) => n.includes("This run stops here.")), r.notes)
 expect("the broken edit's error is not the JSON error", r.tools.every((t) => t.isError && t.text.startsWith("edits is not valid JSON:") && t.text.includes("Fix the JSON, or use write.")), r.tools[0])
 expect("a broken edit changed the file", readFileSync(`${proj}/notes.txt`, "utf8") === original, "changed")
+
+// The model's own shapes, through Pi's order of events: the repair runs before validation. Repeating newText
+// with an empty value used to delete the text and report success, and stray closers used to be refused.
+for (const [what, step] of [["a repeated newText", "repeated"], ["stray closers", "closers"]]) {
+  writeFileSync(`${proj}/notes.txt`, original)
+  const [e] = await session([step, "text"])
+  expect(`${what} failed`, e.tools.length === 1 && !e.tools[0].isError && e.tools[0].text.startsWith("Successfully"), e.tools)
+  expect(`${what} did not write the first text`, readFileSync(`${proj}/notes.txt`, "utf8") === "bye\n", readFileSync(`${proj}/notes.txt`, "utf8"))
+}
+writeFileSync(`${proj}/notes.txt`, original)
 
 // Three failures and then an answer: nothing stops.
 ;[r] = await session(["broken", "broken", "broken", "text"])
