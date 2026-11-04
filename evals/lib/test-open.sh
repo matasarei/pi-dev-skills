@@ -92,6 +92,44 @@ open
 printf '%s\n' "$out" | grep -q 'refuses until it passes' || note 'it does not say what open means'
 rm -f .devskills/open-tests
 
+# An old test's name turning up in what was added doesn't make it new.
+git checkout -q tests/a.test.ts
+printf "// fixed: an old test no longer flakes\n" >> tests/a.test.ts
+failing 'an old test'
+open
+[ "$rc" -eq 1 ] || note "an old test's name in a new comment: exit $rc: $out"
+git checkout -q tests/a.test.ts
+printf "it('an old test, and more')\n" >> tests/a.test.ts
+open
+[ "$rc" -eq 1 ] || note "an old test's name inside a longer new one: exit $rc: $out"
+rm -f .devskills/open-tests
+git checkout -q tests/a.test.ts
+# Each way a runner's test is declared.
+for decl in "it('a new test')" 'test("a new test")' 'it(`a new test`)'; do
+  printf '%s\n' "$decl" >> tests/a.test.ts
+  failing 'a new test'
+  open
+  [ "$rc" -eq 0 ] || note "declared as $decl: exit $rc: $out"
+  rm -f .devskills/open-tests
+  git checkout -q tests/a.test.ts
+done
+cat > runner-names.sh <<'SH'
+echo "1) Tests\\ATest::testNew"; echo "FAILED tests/test_a.py::test_new"; echo "--- FAIL: TestNew (0.00s)"; echo "test tests::new_case ... FAILED"
+echo "4 failed"
+exit 1
+SH
+cp runner.sh runner.keep
+cp runner-names.sh runner.sh
+printf 'public function testNew() {}\ndef test_new():\nfunc TestNew(t *testing.T) {\nfn new_case() {\n' >> tests/a.test.ts
+: > failing.txt
+open
+[ "$rc" -eq 0 ] || note "each runner's declaration: exit $rc: $out"
+[ "$first" = 'OPEN | testNew, test_new, TestNew, new_case' ] || note "each runner's declaration: '$first'"
+rm -f .devskills/open-tests runner-names.sh
+mv runner.keep runner.sh
+git checkout -q tests/a.test.ts
+printf "it('a new test')\n" >> tests/a.test.ts
+
 # A new one and an old one together: nothing is recorded, not even the new one.
 failing 'a new test' 'an old test'
 open

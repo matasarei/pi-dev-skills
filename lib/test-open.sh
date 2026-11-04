@@ -9,9 +9,10 @@
 # fine: the test stays in and keeps failing, test.sh reports TEST OPEN, and /dev-pr
 # still refuses, so a real bug goes on named instead of holding everything up.
 #
-# Only a test this step added can be opened: every failing name must be on an added
-# line of `git diff HEAD`, or in an untracked file, and not on a removed line. A test
-# that was there before is never opened. Whatever can't be read as a test name, such
+# Only a test this step added can be opened: every failing name must be declared on
+# an added line of `git diff HEAD`, or in an untracked file, and not on a removed line.
+# A test that was there before is never opened, and neither is one whose name is built
+# at run time, since the source doesn't hold it. Whatever can't be read as a test name, such
 # as a file that never loaded, is refused.
 #
 # Prints "OPEN | <names>" and exits 0, or "OPEN REFUSED — <why>" and exits 1.
@@ -86,10 +87,20 @@ untracked="$(git ls-files --others --exclude-standard -- . ':(exclude).devskills
 [ -n "$untracked" ] && added="$added
 $(printf '%s\n' "$untracked" | while IFS= read -r file; do cat "$file" 2>/dev/null; done)"
 
+# Whether these lines declare the test: its name quoted whole, or after the keyword that
+# defines one. The name alone would also match a comment, or a longer test's name.
+declares() { # declares <lines> <name>
+  for form in "'$2'" "\"$2\"" "\`$2\`" "def $2(" "func $2(" "fn $2(" "function $2("; do
+    printf '%s\n' "$1" | grep -qF -- "$form" && return 0
+  done
+  return 1
+}
+
 while IFS= read -r name; do
   [ -f "$LIST" ] && grep -qxF -- "$name" "$LIST" && continue # opened by an earlier step
-  printf '%s\n' "$removed" | grep -qF -- "$name" && refuse "\"$name\" was there before this step. Only a test this step added can be open."
-  printf '%s\n' "$added" | grep -qF -- "$name" || refuse "\"$name\" was there before this step. Only a test this step added can be open."
+  if declares "$removed" "$name" || ! declares "$added" "$name"; then
+    refuse "\"$name\" was there before this step, or isn't declared in what it added. Only a test this step added can be open."
+  fi
 done <<NAMES
 $failing
 NAMES
