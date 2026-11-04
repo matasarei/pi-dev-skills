@@ -8,7 +8,8 @@
 # throws on a raw newline, so the string reached validation and the call was
 # rejected three times ("edits.0: must be object"); the model fell back to
 # rewriting whole files. repairEditArgs escapes control characters inside the
-# string literals and parses again; everything else is left for Pi's shim.
+# string literals, replaces stray closers at the end, and keeps the first value
+# of a repeated key; everything else is left for Pi's shim.
 #
 # Always: the repair on its own, in plain node. When Pi is installed globally
 # also: the repair feeding Pi's own edit prepareArguments, as pi/edit.js
@@ -85,13 +86,37 @@ if (typeof repairEditArgs(differs).edits !== "string") fails.push("a repeat with
 const twice = editArgsProblem?.(differs) ?? ""
 if (!twice.startsWith("edits gives newText twice with different values.") || !twice.includes("Fix the JSON, or use write.")) fails.push(`a repeat with different values was not reported: ${twice}`)
 
-// What cannot be repaired is reported with its real error, for the model to fix. The bench's stray bracket:
-const stray = editArgsProblem?.({ path: "f", edits: '[{"oldText": "a", "newText": "b"}]}]' }) ?? ""
+// Stray closers at the end, the bench's commonest failure. One model sent the same call 201 times.
+for (const tail of ["}]}", "}]}]", "}}]", "}", "]}]", "}]  }\n]"]) {
+  r = repairEditArgs({ path: "f", edits: `[{"oldText": "a", "newText": "b"${tail}` })
+  if (!same(r.edits, [{ oldText: "a", newText: "b" }])) fails.push(`the closers ${tail} were not repaired: ${JSON.stringify(r.edits)}`)
+  if (editArgsProblem?.({ path: "f", edits: `[{"oldText": "a", "newText": "b"${tail}` }) !== null) fails.push(`the closers ${tail} were still reported`)
+}
+r = repairEditArgs({ path: "f", edits: `[{"oldText": "a${NL}b", "newText": "c", "newText": ""}]}]` })
+if (!same(r.edits, [{ oldText: `a${NL}b`, newText: "c" }])) fails.push(`raw newlines, a repeat and stray closers together: ${JSON.stringify(r.edits)}`)
+r = repairEditArgs({ path: "f", edits: '{"oldText": "a", "newText": "b"}}' })
+if (!same(r.edits, { oldText: "a", newText: "b" })) fails.push(`a single object with a stray closer: ${JSON.stringify(r.edits)}`)
+// The bench's other ending: a repeat of both keys with null, then stray closers.
+r = repairEditArgs({ path: "f", edits: `[{"oldText": "a${NL}b", "newText": "c", "oldText": null, "newText": null}]}` })
+if (!same(r.edits, [{ oldText: `a${NL}b`, newText: "c" }])) fails.push(`a null repeat and stray closers: ${JSON.stringify(r.edits)}`)
+// Closers inside the text are the model's text, and only the end of the string is repaired.
+r = repairEditArgs({ path: "f", edits: '[{"oldText": "a}]}", "newText": "b]}]"}]}' })
+if (!same(r.edits, [{ oldText: "a}]}", newText: "b]}]" }])) fails.push(`closers inside the text were touched: ${JSON.stringify(r.edits)}`)
+r = repairEditArgs({ path: "f", edits: '[{"oldText": "a\\"}]", "newText": "b"}]}' })
+if (!same(r.edits, [{ oldText: 'a"}]', newText: "b" }])) fails.push(`an escaped quote before closers was misread: ${JSON.stringify(r.edits)}`)
+// What cannot be repaired is reported with its real error, for the model to fix. Two edits run together, an
+// unterminated string, and text after the closers: where the text was meant to end is a guess.
+const together = '[{"oldText": "a", "newText": "b"} {"oldText": "c", "newText": "d"}]'
+for (const [what, edits] of [["two edits run together", together], ["an unterminated string", '[{"oldText": "a", "newText": "b'], ["text after the closers", '[{"oldText": "a", "newText": "b"}]}x'], ["a value that isn't text, then closers", '[{"oldText": "a", "newText": 5}]}']]) {
+  if (typeof repairEditArgs({ path: "f", edits }).edits !== "string") fails.push(`${what} was repaired`)
+  if (!(editArgsProblem?.({ path: "f", edits }) ?? "").startsWith("edits is not valid JSON:")) fails.push(`${what} was not reported`)
+}
+const stray = editArgsProblem?.({ path: "f", edits: together }) ?? ""
 if (!/^edits is not valid JSON: .*position \d+/.test(stray) || !stray.includes("Fix the JSON, or use write.")) fails.push(`the stray bracket is not reported with its JSON error: ${stray}`)
 if (!(editArgsProblem?.({ path: "f", edits: "not json at all" }) ?? "").startsWith("edits is not valid JSON:")) fails.push("garbage is not reported")
 // Raw newlines are something the repair handles, so they are not what gets reported: the bench's model
-// was told about a control character when the real problem was a stray bracket further on.
-const both = editArgsProblem?.({ path: "f", edits: `[{"oldText": "a${NL}b", "newText": "c"}]}]` }) ?? ""
+// was told about a control character when the real problem was further on.
+const both = editArgsProblem?.({ path: "f", edits: `[{"oldText": "a${NL}b", "newText": "c"} {"oldText": "d", "newText": "e"}]` }) ?? ""
 if (both.includes("control character") || !/^edits is not valid JSON: .*position \d+/.test(both)) fails.push(`raw newlines hid the real JSON error: ${both}`)
 const quoted = editArgsProblem?.({ path: "f", edits: `"a${NL}b"` }) ?? ""
 if (!quoted.startsWith("edits is not a list of edits:")) fails.push(`a string with a raw newline is not reported as not a list: ${quoted}`)
@@ -112,6 +137,8 @@ if (piEdit) try {
     fails.push("through Pi's shim, a single object string is not wrapped in an array")
   if (!same(prepare({ path: "f", edits: '[{"oldText": "a", "newText": "b", "newText": ""}]' }).edits, [{ oldText: "a", newText: "b" }]))
     fails.push("through Pi's shim, a repeated newText does not keep the first")
+  if (!same(prepare({ path: "f", edits: '[{"oldText": "a", "newText": "b"}]}]' }).edits, [{ oldText: "a", newText: "b" }]))
+    fails.push("through Pi's shim, stray closers are not repaired")
   if (!same(prepare({ path: "f", oldText: "a", newText: "b" }).edits, [{ oldText: "a", newText: "b" }]))
     fails.push("through Pi's shim, legacy oldText/newText is no longer folded in")
   console.log("edit: checked through Pi's own edit shim too")

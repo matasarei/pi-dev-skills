@@ -54,7 +54,7 @@ let script = []
 let served = 0
 let bodies = []
 const chunk = (delta, finish = null) => `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 1, model: "m", choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`
-const calls = { broken: ["edit", { path: "notes.txt", edits: '[{"oldText": "hello", "newText": "bye"}]}]' }], read: ["read", { path: "notes.txt" }], write: ["write", { path: "written.txt", content: "let x = 3;\n" }] }
+const calls = { broken: ["edit", { path: "notes.txt", edits: '[{"oldText": "hello", "newText": "bye' }], read: ["read", { path: "notes.txt" }], write: ["write", { path: "written.txt", content: "let x = 3;\n" }] }
 // A tool call's name now and its arguments after a silence, or never: the output limit ends it.
 const SILENCE_MS = 3000
 // One line, over and over, until the client goes or the output limit would end it.

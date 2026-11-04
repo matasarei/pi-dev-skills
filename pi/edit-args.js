@@ -11,6 +11,7 @@
 // The same model repeats keys, as in "newText": "the fix", "newText": "". JSON.parse
 // keeps the last value, so that edit deleted the text it was replacing, and Pi
 // reported success. Here a repeated key keeps its first value, or the call is refused.
+// It also ends strings with the wrong closers, as in }]}, and those are replaced.
 
 // The text with every control character inside a JSON string literal escaped,
 // so JSON.parse reads it as the model meant. Outside a literal they are
@@ -84,20 +85,48 @@ function readJson(text) {
   return value()
 }
 
+// The text with whatever follows its last string literal replaced by the closers the
+// open brackets need, when that is only closers and whitespace; null when it isn't. A
+// null value may come first, as the model's repeats end in "newText": null. It changes
+// nothing before that point, so the model's text stays as it wrote it.
+function withRightClosers(text) {
+  const open = []
+  let end = -1
+  let openAtEnd = []
+  let inString = false
+  let escaped = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (inString) {
+      if (escaped) escaped = false
+      else if (ch === "\\") escaped = true
+      else if (ch === '"') { inString = false; end = i + 1; openAtEnd = [...open] }
+    } else if (ch === '"') inString = true
+    else if (ch === "[" || ch === "{") open.push(ch)
+    else if (ch === "]" || ch === "}") open.pop()
+  }
+  const tail = inString || end < 0 ? null : text.slice(end).match(/^(\s*:\s*null)?[\s\]}]*$/)
+  if (!tail) return null
+  return text.slice(0, end) + (tail[1] ?? "") + openAtEnd.reverse().map((ch) => (ch === "[" ? "]" : "}")).join("")
+}
+
 // What a string `edits` reads as: { value }, or { problem } saying why it can't be read.
-// The JSON error is the escaped text's: raw newlines aren't the problem, the repair copes.
+// The JSON error reported is the escaped text's: raw newlines aren't the problem, the
+// repair copes, and with its closers as sent, its position is one the model wrote.
 function readEdits(text) {
   const escaped = escapeControlInStrings(text)
   let problem = null
-  for (const candidate of [text, escaped]) {
+  const read = (candidate, report) => {
     try {
       return { value: readJson(candidate) }
     } catch (e) {
       if (e.repeatedKey) return { problem: `edits gives ${e.repeatedKey} twice with different values.` }
-      problem = `edits is not valid JSON: ${e.message}.`
+      if (report) problem = `edits is not valid JSON: ${e.message}.`
+      return null
     }
   }
-  return { problem }
+  const closed = withRightClosers(escaped)
+  return read(text, false) ?? read(escaped, true) ?? (closed === null ? null : read(closed, false)) ?? { problem }
 }
 
 // The arguments with a string `edits` read whenever it reads as a list or an object;
