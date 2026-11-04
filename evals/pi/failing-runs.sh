@@ -71,6 +71,23 @@ for (const command of ["bash lib/test-open.sh", "sh ./lib/test-open.sh", "lib/te
   if (!gate(step(0), { toolName: "bash", input: { command } }, process.cwd())?.block) fails.push(`${command} was not refused`)
 }
 
+// The list is test-open.sh's. Written by hand it would skip both the wait and the new-test check.
+for (const event of [
+  { toolName: "write", input: { path: ".devskills/open-tests", content: "x" } },
+  { toolName: "write", input: { path: "/abs/project/.devskills/open-tests", content: "x" } },
+  { toolName: "edit", input: { path: ".devskills/open-tests", edits: [] } },
+  ...["echo x > .devskills/open-tests", "printf 'x\\n' >> .devskills/open-tests", "echo x | tee .devskills/open-tests", "cp a .devskills/open-tests", "mv a .devskills/open-tests", "sed -i '' 's/a/b/' .devskills/open-tests", "rm .devskills/open-tests", "cd x && echo y > .devskills/open-tests"].map((command) => ({ toolName: "bash", input: { command } })),
+]) {
+  for (const state of [null, step(OFFER_AT)]) {
+    const v = gate(state, event, process.cwd())
+    if (!v?.block || !v.reason.includes("open-tests")) fails.push(`writing the list was not refused: ${JSON.stringify(event.input)}`)
+  }
+}
+for (const command of ["cat .devskills/open-tests", "grep -c x .devskills/open-tests", "wc -l .devskills/open-tests", "ls .devskills", "echo x > other.txt"]) {
+  if (gate(step(0), { toolName: "bash", input: { command } }, process.cwd())?.block) fails.push(`${command} was refused`)
+}
+if (gate(step(0), { toolName: "write", input: { path: "src/open-tests", content: "x" } }, process.cwd())?.block) fails.push("another file named open-tests was refused")
+
 for (const f of fails) console.log(`FAIL  ${f}`)
 process.exit(fails.length ? 1 : 0)
 JS

@@ -154,8 +154,21 @@ const learnedOnly = (toolName, input) => {
 const runsTestOpen = (command) =>
   simpleCommands(command).some((p) => /^(?:(?:bash|sh)\s+)?["']?[^\s"']*test-open\.sh["']?(\s|$)/.test(p) && !p.includes("evals/"))
 
+// Whether a call changes the list of open tests, as opposed to reading it. Written by
+// hand, it would skip both the wait and the check that the step added the test.
+const OPEN_LIST = /(^|[\s"'=/])\.devskills\/open-tests(?=$|[\s"'])/
+const READ_TOOL = /^(cat|grep|head|tail|wc|ls|diff)(\s|$)/
+const changesOpenList = (toolName, input) => {
+  if (toolName === "write" || toolName === "edit") return /(^|\/)\.devskills\/open-tests$/.test(input?.path ?? "")
+  if (toolName !== "bash" || typeof input?.command !== "string") return false
+  return simpleCommands(input.command).some((p) => OPEN_LIST.test(p) && (!READ_TOOL.test(p) || p.includes(">")))
+}
+
 export function gate(state, event, cwd) {
   const input = event.input ?? {}
+  if (changesOpenList(event.toolName, input)) {
+    return { block: true, reason: `${REFUSES}.devskills/open-tests is test-open.sh's list. Never change it by hand.` }
+  }
   // Letting a step finish with a failing test is only for a step that's stuck.
   if (event.toolName === "bash" && typeof input.command === "string" && runsTestOpen(input.command) && (state?.failingRuns ?? 0) < OFFER_AT) {
     return {
