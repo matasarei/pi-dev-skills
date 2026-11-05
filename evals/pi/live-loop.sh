@@ -116,7 +116,7 @@ const server = createServer((req, res) => {
   })
 })
 await new Promise((r) => server.listen(0, "127.0.0.1", r))
-writeFileSync(`${work}/agent/models.json`, JSON.stringify({ providers: { mock: { baseUrl: `http://127.0.0.1:${server.address().port}/v1`, api: "openai-completions", apiKey: "x", models: [{ id: "m", name: "m", input: ["text"], contextWindow: 32768, maxTokens: 1024 }] } } }))
+writeFileSync(`${work}/agent/models.json`, JSON.stringify({ providers: { mock: { baseUrl: `http://127.0.0.1:${server.address().port}/v1`, api: "openai-completions", apiKey: "x", models: [{ id: "m", name: "m", input: ["text"], contextWindow: 32768, maxTokens: 8192 }] } } }))
 
 // One Pi process, one prompt per entry: what each prompt's run did, up to agent_settled.
 // settles: how many agent_settled to wait for, when a run starts another. linger: how long
@@ -254,6 +254,27 @@ expect("a run that keeps repeating did not stop after 3", bodies.length === 3 &&
 // The person's own prompt: not stopped, and it runs to the limit as before.
 ;[r] = await session(["repeat"], ["go"], [commandsExt], { httpIdleTimeoutMs: 1200000 }, { linger: 200 })
 expect("the person's own prompt was stopped", bodies.length === 1 && r.aborted === false && r.stops[0] === "length" && !r.notes.some((n) => n.includes("repeating")), { requests: bodies.length, r })
+
+// A cut-off during a command: the model is asked for a smaller change, and every later
+// request has the lower limit. The session's own record keeps Pi's text.
+const limitOf = (body) => body?.max_completion_tokens ?? body?.max_tokens
+const piAsks = "Re-issue the tool call"
+const smaller = "Make a smaller change"
+const toolTexts = (body) => (body?.messages ?? []).filter((m) => m.role === "tool").map((m) => JSON.stringify(m.content))
+const fullLimit = JSON.parse(readFileSync(`${work}/agent/models.json`, "utf8")).providers.mock.models[0].maxTokens
+;[r] = await session(["read", "cut", "read", "text"], ["/dev-init"], [commandsExt], { httpIdleTimeoutMs: 1200000 })
+expect("the requests before a cut-off did not keep the limit", limitOf(bodies[0]) === fullLimit && limitOf(bodies[1]) === fullLimit, bodies.map(limitOf))
+expect("the request after a cut-off did not have the lower limit", limitOf(bodies[2]) === 4096, bodies.map(limitOf))
+expect("a later request did not keep the lower limit", limitOf(bodies[3]) === 4096, bodies.map(limitOf))
+expect("the model was still told to re-issue", !toolTexts(bodies[2]).some((t) => t.includes(piAsks)) && !toolTexts(bodies[3]).some((t) => t.includes(piAsks)), toolTexts(bodies[3]))
+expect("the model was not asked for a smaller change", toolTexts(bodies[2]).some((t) => t.includes(smaller)), toolTexts(bodies[2]))
+expect("the other call's result changed", toolTexts(bodies[2]).filter((t) => t.includes(smaller)).length === 1, toolTexts(bodies[2]))
+expect("the session's record of the result changed", r.tools[1]?.isError === true && r.tools[1].text.includes(piAsks), r.tools[1])
+
+// The person's own prompt: Pi's text and the full limit, as before.
+;[r] = await session(["cut", "text"], ["go"], [commandsExt], { httpIdleTimeoutMs: 1200000 })
+expect("the person's own prompt lost the limit", limitOf(bodies[1]) === fullLimit, bodies.map(limitOf))
+expect("the person's own prompt lost Pi's text", toolTexts(bodies[1]).some((t) => t.includes(piAsks)), toolTexts(bodies[1]))
 
 // A stuck step: the 5th failing test run carries the offer, once, and test-open.sh waits for it.
 const offer = "This step's tests have now failed"
