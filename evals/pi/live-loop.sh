@@ -116,7 +116,7 @@ const server = createServer((req, res) => {
   })
 })
 await new Promise((r) => server.listen(0, "127.0.0.1", r))
-writeFileSync(`${work}/agent/models.json`, JSON.stringify({ providers: { mock: { baseUrl: `http://127.0.0.1:${server.address().port}/v1`, api: "openai-completions", apiKey: "x", models: [{ id: "m", name: "m", input: ["text"], contextWindow: 32768, maxTokens: 8192 }] } } }))
+writeFileSync(`${work}/agent/models.json`, JSON.stringify({ providers: { mock: { baseUrl: `http://127.0.0.1:${server.address().port}/v1`, api: "openai-completions", apiKey: "x", models: [{ id: "m", name: "m", input: ["text"], contextWindow: 32768, maxTokens: 8192, samplingParams: { temperature: 0 } }] } } }))
 
 // One Pi process, one prompt per entry: what each prompt's run did, up to agent_settled.
 // settles: how many agent_settled to wait for, when a run starts another. linger: how long
@@ -264,6 +264,7 @@ const smaller = "Make a smaller change"
 const toolTexts = (body) => (body?.messages ?? []).filter((m) => m.role === "tool").map((m) => JSON.stringify(m.content))
 const fullLimit = JSON.parse(readFileSync(`${work}/agent/models.json`, "utf8")).providers.mock.models[0].maxTokens
 ;[r] = await session(["read", "cut", "read", "text"], ["/dev-init"], [commandsExt], { httpIdleTimeoutMs: 1200000 })
+expect("the temperature did not go up after a cut-off, and only then", bodies[0]?.temperature === 0 && bodies[1]?.temperature === 0 && bodies[2]?.temperature === 0.3 && bodies[3]?.temperature === 0.3, bodies.map((b) => b.temperature))
 expect("the requests before a cut-off did not keep the limit", limitOf(bodies[0]) === fullLimit && limitOf(bodies[1]) === fullLimit, bodies.map(limitOf))
 expect("the request after a cut-off did not have the lower limit", limitOf(bodies[2]) === 4096, bodies.map(limitOf))
 expect("a later request did not keep the lower limit", limitOf(bodies[3]) === 4096, bodies.map(limitOf))
@@ -274,7 +275,7 @@ expect("the session's record of the result changed", r.tools[1]?.isError === tru
 
 // The person's own prompt: Pi's text and the full limit, as before.
 ;[r] = await session(["cut", "text"], ["go"], [commandsExt], { httpIdleTimeoutMs: 1200000 })
-expect("the person's own prompt lost the limit", limitOf(bodies[1]) === fullLimit, bodies.map(limitOf))
+expect("the person's own prompt lost the limit", limitOf(bodies[1]) === fullLimit && bodies[1]?.temperature === 0, bodies.map(limitOf))
 expect("the person's own prompt lost Pi's text", toolTexts(bodies[1]).some((t) => t.includes(piAsks)), toolTexts(bodies[1]))
 
 // Always cut off: the third ends the run, and nothing follows. A runaway in text counts too.
@@ -291,7 +292,7 @@ expect("two cut-offs ended the run", bodies.length === 3 && r.stops.at(-1) === "
 const sessions = `${work}/sessions`
 await session(["cut"], ["/dev-init"], [commandsExt], { httpIdleTimeoutMs: 1200000 }, { linger: 500, sessionArgs: ["--session-dir", sessions] })
 ;[r] = await session(["cut", "cut", "text"], ["/dev-init"], [commandsExt], { httpIdleTimeoutMs: 1200000 }, { sessionArgs: ["--session-dir", sessions, "--continue"] })
-expect("a reopened session lost the lower limit", limitOf(bodies[0]) === 4096, bodies.map(limitOf))
+expect("a reopened session lost the lower limit", limitOf(bodies[0]) === 4096 && bodies[0]?.temperature === 0.3, bodies.map(limitOf))
 expect("a reopened session did not hold the three cut-offs", toolTexts(bodies[0]).filter((t) => t.includes(smaller)).length === 3 && !toolTexts(bodies[0]).some((t) => t.includes(piAsks)), toolTexts(bodies[0]))
 const answered = new Set(bodies[0].messages.filter((m) => m.role === "tool").map((m) => m.tool_call_id))
 const calledIds = bodies[0].messages.flatMap((m) => m.tool_calls ?? []).map((c) => c.id)

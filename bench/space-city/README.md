@@ -81,7 +81,7 @@ It needs the model loaded as above, and it prints one JSON line:
 **What it can't show:**
 - **A replay is one sample, not a verdict.** The same request has run away to the 16,384-token limit on one attempt and finished in 26 s on another.
 - **The output limit can differ near a full window.** It sends the model's `maxTokens`, and Pi lowers that when a context is within about 20k tokens of the window, which the log doesn't record.
-- **After a cut-off, the log isn't what the model saw.** During a `/dev-*` run, `pi/cut-off.js` changes the request, and the log keeps Pi's text. A faithful replay of a later reply has to `--set` both the new text and `max_completion_tokens: 4096`.
+- **After a cut-off, the log isn't what the model saw.** During a `/dev-*` run, `pi/cut-off.js` changes the request, and the log keeps Pi's text. A faithful replay of a later reply has to `--set` the new text, `max_completion_tokens: 4096` and `temperature: 0.3`.
 - **Some replies can't be replayed.** It refuses a context with images or thinking, one holding an error Pi didn't retry, and a reply the log has no end for, such as one a run's time limit cut off. It sends only to a plain `http://` server, with no API key.
 - **It checks what the model says, not whether that works.** To test a returned edit, apply `args.txt` to a copy of the tree and run the project's checks by hand.
 

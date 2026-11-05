@@ -18,7 +18,7 @@
 //
 // A tool call that runs to the limit can't be stopped, since the server holds its
 // arguments back, so once one is in the context the model is asked for a smaller change
-// at a lower limit (pi/cut-off.js). It shares the runaway's count, and it's off for the
+// at a lower limit and a higher temperature (pi/cut-off.js). It shares the runaway's count, and it's off for the
 // person's own prompts too.
 //
 // It also counts a step's failing test runs (pi/failing-runs.js), and on the 5th tells
@@ -28,7 +28,7 @@ import { execFileSync } from "node:child_process"
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { dirname, isAbsolute, join } from "node:path"
 import { fileURLToPath } from "node:url"
-import { isCutOff, withLowerLimit, withSmallerAsk } from "./cut-off.js"
+import { isCutOff, withRetrySettings, withSmallerAsk } from "./cut-off.js"
 import { description, expandSkill } from "./expand.js"
 import { failedTestRun, OFFER, OFFER_AT } from "./failing-runs.js"
 import { idleProblem, isLocalUrl } from "./idle-timeout.js"
@@ -296,7 +296,7 @@ export default function devCommands(pi) {
     cutOffInContext = cutOff
     return cutOff ? { messages } : undefined
   })
-  pi.on?.("before_provider_request", (event) => (cutOffInContext ? withLowerLimit(event.payload) : undefined))
+  pi.on?.("before_provider_request", (event) => (cutOffInContext ? withRetrySettings(event.payload) : undefined))
   pi.on?.("agent_settled", (_event, ctx) => {
     if (!stopped) return
     stopped = false

@@ -4,7 +4,7 @@
 #   bash evals/pi/cut-off.sh
 #
 # Pi answers such a call by asking for it again, at the same limit. Asserted: what
-# counts as a cut-off, what the model is told instead, and what the limit becomes.
+# counts as a cut-off, what the model is told instead, and what the request becomes.
 # How pi/commands.js acts on it is in evals/pi/live-loop.sh.
 #
 # Exits 0 when every case holds, 1 otherwise, naming each failure.
@@ -15,7 +15,7 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 command -v node >/dev/null 2>&1 || { printf 'cut-off: node is required — not installed\n' >&2; exit 1; }
 
 node --input-type=module - "$root/pi/cut-off.js" <<'JS'
-const { isCutOff, RETRY_LIMIT, withLowerLimit, withSmallerAsk } = await import(process.argv[2])
+const { isCutOff, RETRY_LIMIT, RETRY_TEMPERATURE, withRetrySettings, withSmallerAsk } = await import(process.argv[2])
 const fails = []
 const expect = (what, ok, got) => { if (!ok) fails.push(`${what}: ${JSON.stringify(got)}`) }
 
@@ -70,7 +70,7 @@ expect("an earlier cut-off was missed", out.cutOff === true, out.cutOff)
 out = withSmallerAsk([reply("length", call("a"))])
 expect("a cut-off with no result yet was missed", out.cutOff === true && out.messages.length === 1, out)
 
-// What the limit becomes.
+// What the request becomes.
 for (const [name, payload, want] of [
   ["max_completion_tokens", { max_completion_tokens: 12288, a: 1 }, { max_completion_tokens: RETRY_LIMIT, a: 1 }],
   ["max_tokens", { max_tokens: 16384 }, { max_tokens: RETRY_LIMIT }],
@@ -80,18 +80,32 @@ for (const [name, payload, want] of [
   ["neither field", { messages: [] }, { messages: [] }],
 ]) {
   const before = JSON.stringify(payload)
-  const got = withLowerLimit(payload)
+  const got = withRetrySettings(payload)
   expect(`${name}: wrong limit`, JSON.stringify(got) === JSON.stringify(want), got)
   expect(`${name}: the input was changed`, JSON.stringify(payload) === before, payload)
 }
-expect("no payload threw or changed", withLowerLimit(undefined) === undefined, "changed")
+expect("no payload threw or changed", withRetrySettings(undefined) === undefined, "changed")
+
+// The temperature goes up from 0, and is otherwise the model's own.
+for (const [name, given, want] of [
+  ["temperature 0", 0, RETRY_TEMPERATURE],
+  ["a temperature under it", 0.1, RETRY_TEMPERATURE],
+  ["the temperature itself", RETRY_TEMPERATURE, RETRY_TEMPERATURE],
+  ["a higher temperature", 0.7, 0.7],
+]) {
+  const payload = { temperature: given }
+  const got = withRetrySettings(payload).temperature
+  expect(`${name}: wrong temperature`, got === want, got)
+  expect(`${name}: the input was changed`, payload.temperature === given, payload)
+}
+expect("a temperature the model doesn't set was added", !("temperature" in withRetrySettings({ max_tokens: 16384 })), "added")
 
 for (const f of fails) console.log(`FAIL  ${f}`)
 process.exit(fails.length ? 1 : 0)
 JS
 rc=$?
 if [ "$rc" -eq 0 ]; then
-  printf 'cut-off: a cut-off asks for a smaller change at a lower limit, and nothing else changes\n'
+  printf 'cut-off: a cut-off asks for a smaller change at a lower limit and a higher temperature, and nothing else changes\n'
   exit 0
 fi
 printf 'cut-off: case(s) failed\n' >&2
