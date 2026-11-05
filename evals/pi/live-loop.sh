@@ -276,6 +276,15 @@ expect("the session's record of the result changed", r.tools[1]?.isError === tru
 expect("the person's own prompt lost the limit", limitOf(bodies[1]) === fullLimit, bodies.map(limitOf))
 expect("the person's own prompt lost Pi's text", toolTexts(bodies[1]).some((t) => t.includes(piAsks)), toolTexts(bodies[1]))
 
+// Always cut off: the third ends the run, and nothing follows. A runaway in text counts too.
+runs = await session(["cut"], ["/dev-init"], [commandsExt], { httpIdleTimeoutMs: 1200000 }, { linger: 500 })
+expect("three cut-offs did not stop at three requests", bodies.length === 3 && runs[0]?.notes.some((n) => n.includes("This run stops here.")), { requests: bodies.length, notes: runs[0]?.notes })
+expect("a cut-off was not counted out loud", runs[0]?.notes.some((n) => n.includes("(1 of 3)")) && runs[0]?.notes.some((n) => n.includes("(2 of 3)")), runs[0]?.notes)
+runs = await session(["repeat", "cut", "cut", "text"], ["/dev-init"], [commandsExt], { httpIdleTimeoutMs: 1200000 }, { settles: 2, linger: 500 })
+expect("a runaway and two cut-offs did not stop at three requests", bodies.length === 3 && runs.at(-1)?.notes.some((n) => n.includes("This run stops here.")), { requests: bodies.length, notes: runs.at(-1)?.notes })
+;[r] = await session(["cut", "cut", "text"], ["/dev-init"], [commandsExt], { httpIdleTimeoutMs: 1200000 })
+expect("two cut-offs ended the run", bodies.length === 3 && r.stops.at(-1) === "stop" && !r.notes.some((n) => n.includes("This run stops here.")), { requests: bodies.length, r })
+
 // A stuck step: the 5th failing test run carries the offer, once, and test-open.sh waits for it.
 const offer = "This step's tests have now failed"
 for (const i of [1, 2, 3, 4, 5, 6]) calls[`failing${i}`] = ["bash", { command: `printf 'run ${i}\\nTests  1 failed | 1 passed\\n'; exit 1` }]

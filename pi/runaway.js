@@ -13,7 +13,8 @@
 const TAIL = 200
 const TIMES = 3
 
-// The third runaway in a command ends its run, as with the loop breaker.
+// The third runaway in a command ends its run, as with the loop breaker. A tool call
+// cut off at the limit counts as one (pi/cut-off.js).
 export const STOP_AT = 3
 
 // What replays tested: changing it changes what was proven.

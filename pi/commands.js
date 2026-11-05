@@ -23,7 +23,7 @@ import { execFileSync } from "node:child_process"
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { dirname, isAbsolute, join } from "node:path"
 import { fileURLToPath } from "node:url"
-import { withLowerLimit, withSmallerAsk } from "./cut-off.js"
+import { isCutOff, withLowerLimit, withSmallerAsk } from "./cut-off.js"
 import { description, expandSkill } from "./expand.js"
 import { failedTestRun, OFFER, OFFER_AT } from "./failing-runs.js"
 import { idleProblem, isLocalUrl } from "./idle-timeout.js"
@@ -270,6 +270,16 @@ export default function devCommands(pi) {
     runaways++
     stopped = true
     say(ctx, `A reply started repeating itself, so it was stopped (${runaways} of ${STOP_AT}).`, "warning")
+    ctx.abort()
+  })
+  // A cut-off is a runaway the watch couldn't see, so it shares the count. Pi goes on by
+  // itself, so only the last one needs stopping.
+  pi.on?.("message_end", (event, ctx) => {
+    if (!watching || !isCutOff(event.message)) return
+    runaways++
+    say(ctx, `A tool call ran to the output limit (${runaways} of ${STOP_AT}).`, "warning")
+    if (runaways < STOP_AT) return
+    stopped = true
     ctx.abort()
   })
   // A cut-off in the context: see pi/cut-off.js. The session keeps Pi's text, since this
