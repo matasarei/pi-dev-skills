@@ -1,14 +1,13 @@
 // The check for a reply that repeats itself.
 //
 // At temperature 0 a local model sometimes starts repeating itself in text and
-// writes on to the output limit, about 10 minutes, and a reply with no tool call
+// writes on to the output limit, about 8 minutes, and a reply with no tool call
 // then ends the session. Over 958 logged replies, the check below fired on all 3
 // that did this, within about 40 s, and on none of the others. pi/commands.js acts
 // on it. This isn't an extension itself.
 //
 // It sees text only. A local server holds a tool call's arguments back until they
-// are complete, so a runaway inside them can't be seen; Pi answers those at the
-// limit with a tool error.
+// are complete, so a runaway inside them can't be seen. pi/cut-off.js has those.
 
 const TAIL = 200
 const TIMES = 3

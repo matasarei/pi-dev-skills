@@ -25,7 +25,7 @@ When developing, updating, or debugging skills in this repository:
 
 1. **Prompt & Script Edits**:
    - Skills live in `skills/<skill-name>/SKILL.md`.
-   - Reusable scripts live in `lib/<script>.sh`; the Pi extensions in `pi/` (`commands.js` registers the commands and holds the step gate, `expand.js` runs a skill's `!` lines, `guard.js` is the guard, `edit.js` wraps Pi's edit tool, and, neither of them extensions, `idle-timeout.js` says whether Pi's idle timeout is enough and `runaway.js` spots a reply repeating itself); templates in `skills/dev-init/templates/`.
+   - Reusable scripts live in `lib/<script>.sh`; the Pi extensions in `pi/` (`commands.js` registers the commands and holds the step gate, `expand.js` runs a skill's `!` lines, `guard.js` is the guard, `edit.js` wraps Pi's edit tool, and, none of them extensions, `idle-timeout.js` says whether Pi's idle timeout is enough, `runaway.js` spots a reply repeating itself, `cut-off.js` holds the rule for a tool call cut off at the output limit, and `failing-runs.js` counts a step's failing test runs); templates in `skills/dev-init/templates/`.
    - **Where a gate lives**: a fact any harness can use is a `lib/*.sh` script (`step-start.sh` cuts the branch and prints `STOP` when it must not start); a rule that needs session state is in `pi/commands.js` (the step gate); a rule on one tool call, or on the recent run of calls (the loop breaker), is in `pi/guard.js`. A decision code can make is not left to the prompt.
 2. **Invariants to Check**:
    - **Size cap**: Run `bash evals/skills/size.sh` — every `SKILL.md` must remain under 90 lines and 5,000 bytes (description under 200 chars).

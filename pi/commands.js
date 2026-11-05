@@ -16,6 +16,11 @@
 // off for the person's own prompts: the nudge asks for a tool call, which only makes
 // sense in a step.
 //
+// A tool call that runs to the limit can't be stopped, since the server holds its
+// arguments back, so once one is in the context the model is asked for a smaller change
+// at a lower limit (pi/cut-off.js). It shares the runaway's count, and it's off for the
+// person's own prompts too.
+//
 // It also counts a step's failing test runs (pi/failing-runs.js), and on the 5th tells
 // the model about lib/test-open.sh, which it refuses before then.
 
