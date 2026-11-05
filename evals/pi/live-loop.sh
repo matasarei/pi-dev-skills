@@ -120,13 +120,14 @@ writeFileSync(`${work}/agent/models.json`, JSON.stringify({ providers: { mock: {
 
 // One Pi process, one prompt per entry: what each prompt's run did, up to agent_settled.
 // settles: how many agent_settled to wait for, when a run starts another. linger: how long
-// to stay after the last, to see a request that shouldn't come.
-const session = (steps, prompts = ["go"], first = [], settings = {}, { settles = prompts.length, linger = 0 } = {}) => new Promise((resolve) => {
+// to stay after the last, to see a request that shouldn't come. sessionArgs: how Pi keeps
+// the session, for a case that reopens one.
+const session = (steps, prompts = ["go"], first = [], settings = {}, { settles = prompts.length, linger = 0, sessionArgs = ["--no-session"] } = {}) => new Promise((resolve) => {
   script = steps
   served = 0
   bodies = []
   writeFileSync(`${work}/agent/settings.json`, JSON.stringify(settings))
-  const pi = spawn("pi", ["--mode", "rpc", "--no-session", "--no-extensions", ...first.flatMap((e) => ["-e", e]), "-e", `${root}/pi/guard.js`, "-e", `${root}/pi/edit.js`, "--model", "mock/m"], { cwd: proj, env: { ...process.env, PI_CODING_AGENT_DIR: `${work}/agent` }, stdio: ["pipe", "pipe", "ignore"] })
+  const pi = spawn("pi", ["--mode", "rpc", ...sessionArgs, "--no-extensions", ...first.flatMap((e) => ["-e", e]), "-e", `${root}/pi/guard.js`, "-e", `${root}/pi/edit.js`, "--model", "mock/m"], { cwd: proj, env: { ...process.env, PI_CODING_AGENT_DIR: `${work}/agent` }, stdio: ["pipe", "pipe", "ignore"] })
   const runs = []
   const fresh = () => ({ tools: [], notes: [], aborted: null, retries: 0, stops: [] })
   let run = fresh()
@@ -284,6 +285,18 @@ runs = await session(["repeat", "cut", "cut", "text"], ["/dev-init"], [commandsE
 expect("a runaway and two cut-offs did not stop at three requests", bodies.length === 3 && runs.at(-1)?.notes.some((n) => n.includes("This run stops here.")), { requests: bodies.length, notes: runs.at(-1)?.notes })
 ;[r] = await session(["cut", "cut", "text"], ["/dev-init"], [commandsExt], { httpIdleTimeoutMs: 1200000 })
 expect("two cut-offs ended the run", bodies.length === 3 && r.stops.at(-1) === "stop" && !r.notes.some((n) => n.includes("This run stops here.")), { requests: bodies.length, r })
+
+// A session reopened with pi --continue, after that stop: the context still holds the
+// cut-offs, so it keeps the limit and the text, while its count starts again.
+const sessions = `${work}/sessions`
+await session(["cut"], ["/dev-init"], [commandsExt], { httpIdleTimeoutMs: 1200000 }, { linger: 500, sessionArgs: ["--session-dir", sessions] })
+;[r] = await session(["cut", "cut", "text"], ["/dev-init"], [commandsExt], { httpIdleTimeoutMs: 1200000 }, { sessionArgs: ["--session-dir", sessions, "--continue"] })
+expect("a reopened session lost the lower limit", limitOf(bodies[0]) === 4096, bodies.map(limitOf))
+expect("a reopened session did not hold the three cut-offs", toolTexts(bodies[0]).filter((t) => t.includes(smaller)).length === 3 && !toolTexts(bodies[0]).some((t) => t.includes(piAsks)), toolTexts(bodies[0]))
+const answered = new Set(bodies[0].messages.filter((m) => m.role === "tool").map((m) => m.tool_call_id))
+const calledIds = bodies[0].messages.flatMap((m) => m.tool_calls ?? []).map((c) => c.id)
+expect("a reopened session has a call with no answer", calledIds.length === 3 && calledIds.every((id) => answered.has(id)), { calledIds, answered: [...answered] })
+expect("a reopened session's count did not start again", bodies.length === 3 && r.stops.at(-1) === "stop" && !r.notes.some((n) => n.includes("This run stops here.")), { requests: bodies.length, r })
 
 // A stuck step: the 5th failing test run carries the offer, once, and test-open.sh waits for it.
 const offer = "This step's tests have now failed"

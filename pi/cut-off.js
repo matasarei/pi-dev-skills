@@ -7,8 +7,8 @@
 //
 // So once one is in the context, the model is asked for a smaller change instead, and
 // a reply gets a lower limit. Of 80 finished replies after a cut-off in the logs, 78
-// were under 1,600 tokens. It reads the context, not a count, so a resumed session
-// keeps it. pi/commands.js acts on it. This isn't an extension itself.
+// were under 1,600 tokens. It reads the context, not a count, so a session reopened
+// with pi --continue keeps it. pi/commands.js acts on it. This isn't an extension itself.
 
 // About 135 s at the model's 30 tokens/s, and about 16,000 characters.
 export const RETRY_LIMIT = 4096
