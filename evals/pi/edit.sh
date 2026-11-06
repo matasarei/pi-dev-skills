@@ -80,11 +80,15 @@ if (r.edits[0].x !== undefined || Object.getPrototypeOf(r.edits[0]) !== Object.p
 // Escapes in the text survive the reader.
 r = repairEditArgs({ path: "f", edits: '[{"oldText": "say \\"hi\\"", "newText": "tab\\tback\\\\slash \\u0041"}]' })
 if (!same(r.edits, [{ oldText: 'say "hi"', newText: `tab${TAB}back\\slash A` }])) fails.push(`escapes changed: ${JSON.stringify(r.edits)}`)
+// Every refusal ends by asking for the flat shape, which can't nest JSON in a string, and doesn't
+// name write: after "or use write" the bench's model spliced the file from the shell and broke it.
+const ASK = "Send this change again as one edit with path, oldText and newText as plain arguments, without edits. If it is long, add it in parts of about 40 lines, one edit each. Don't rewrite the file from the shell."
+const asks = (t) => t.endsWith(` ${ASK}`) && !t.includes("use write")
 // A later value that is real, different text is a guess either way: refused, in place of keeping the last.
 const differs = { path: "f", edits: '[{"oldText": "a", "newText": "one", "newText": "two"}]' }
 if (typeof repairEditArgs(differs).edits !== "string") fails.push("a repeat with different values was repaired")
 const twice = editArgsProblem?.(differs) ?? ""
-if (!twice.startsWith("edits gives newText twice with different values.") || !twice.includes("Fix the JSON, or use write.")) fails.push(`a repeat with different values was not reported: ${twice}`)
+if (!twice.startsWith("edits gives newText twice with different values.") || !asks(twice)) fails.push(`a repeat with different values was not reported: ${twice}`)
 
 // Stray closers at the end, the bench's commonest failure. One model sent the same call 201 times.
 for (const tail of ["}]}", "}]}]", "}}]", "}", "]}]", "}]  }\n]"]) {
@@ -112,7 +116,7 @@ for (const [what, edits] of [["two edits run together", together], ["an untermin
   if (!(editArgsProblem?.({ path: "f", edits }) ?? "").startsWith("edits is not valid JSON:")) fails.push(`${what} was not reported`)
 }
 const stray = editArgsProblem?.({ path: "f", edits: together }) ?? ""
-if (!/^edits is not valid JSON: .*position \d+/.test(stray) || !stray.includes("Fix the JSON, or use write.")) fails.push(`the stray bracket is not reported with its JSON error: ${stray}`)
+if (!/^edits is not valid JSON: .*position \d+/.test(stray) || !asks(stray)) fails.push(`the stray bracket is not reported with its JSON error: ${stray}`)
 if (!(editArgsProblem?.({ path: "f", edits: "not json at all" }) ?? "").startsWith("edits is not valid JSON:")) fails.push("garbage is not reported")
 // Raw newlines are something the repair handles, so they are not what gets reported: the bench's model
 // was told about a control character when the real problem was further on.
@@ -122,7 +126,7 @@ const quoted = editArgsProblem?.({ path: "f", edits: `"a${NL}b"` }) ?? ""
 if (!quoted.startsWith("edits is not a list of edits:")) fails.push(`a string with a raw newline is not reported as not a list: ${quoted}`)
 // Valid JSON that is not edits at all is reported too, without calling it invalid.
 const num = editArgsProblem?.({ path: "f", edits: "5" }) ?? ""
-if (!num.startsWith("edits is not a list of edits:") || !num.includes("Fix the JSON, or use write.")) fails.push(`a number is not reported: ${num}`)
+if (!num.startsWith("edits is not a list of edits:") || !asks(num)) fails.push(`a number is not reported: ${num}`)
 // Everything the repair or Pi can use has no problem.
 for (const ok of [{ path: "f", edits: raw }, { path: "f", edits: '[{"oldText":"a","newText":"b"}]' }, { path: "f", edits: arr }, { path: "f", oldText: "a", newText: "b" }, { path: "f", edits: `{"oldText": "a${NL}b", "newText": "c"}` }, { path: "f", edits: "junk", oldText: "a", newText: "b" }, null])
   if (editArgsProblem?.(ok) !== null) fails.push(`a usable shape was reported: ${JSON.stringify(ok)}`)

@@ -141,11 +141,18 @@ export function repairEditArgs(args) {
 // is nothing to report. Pi's validation would say "edits.0: expected object, got
 // string", which names no real problem, and the bench's model sent one such call
 // 179 times. Legacy oldText/newText is fine: Pi's shim uses those and drops `edits`.
+//
+// The refusal asks for that flat shape. Its values are plain arguments, so there's
+// no JSON inside a string to get wrong, where half the bench's edits over about
+// 2,500 characters were refused. It doesn't name write: told "or use write", the
+// model spliced the file from the shell instead and broke it.
+const ASK = "Send this change again as one edit with path, oldText and newText as plain arguments, without edits. If it is long, add it in parts of about 40 lines, one edit each. Don't rewrite the file from the shell."
+
 export function editArgsProblem(args) {
   const repaired = repairEditArgs(args)
   if (!repaired || typeof repaired.edits !== "string") return null
   if (typeof repaired.oldText === "string" && typeof repaired.newText === "string") return null
   const { problem } = readEdits(repaired.edits)
-  if (problem) return `${problem} Fix the JSON, or use write.`
-  return `edits is not a list of edits: it reads as ${repaired.edits.slice(0, 40)}. Fix the JSON, or use write.`
+  if (problem) return `${problem} ${ASK}`
+  return `edits is not a list of edits: it reads as ${repaired.edits.slice(0, 40)}. ${ASK}`
 }
