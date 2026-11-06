@@ -62,6 +62,7 @@ for token in \
   '3 or fewer different calls' \
   'fails validation' \
   'pi/runaway.js' \
+  'pi/cut-off.js' \
   'evals/pi/live-loop.sh' \
   'evals/pi/edit.sh' \
   'verify-clean.sh' \

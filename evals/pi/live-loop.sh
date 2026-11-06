@@ -116,17 +116,18 @@ const server = createServer((req, res) => {
   })
 })
 await new Promise((r) => server.listen(0, "127.0.0.1", r))
-writeFileSync(`${work}/agent/models.json`, JSON.stringify({ providers: { mock: { baseUrl: `http://127.0.0.1:${server.address().port}/v1`, api: "openai-completions", apiKey: "x", models: [{ id: "m", name: "m", input: ["text"], contextWindow: 32768, maxTokens: 1024 }] } } }))
+writeFileSync(`${work}/agent/models.json`, JSON.stringify({ providers: { mock: { baseUrl: `http://127.0.0.1:${server.address().port}/v1`, api: "openai-completions", apiKey: "x", models: [{ id: "m", name: "m", input: ["text"], contextWindow: 32768, maxTokens: 8192, samplingParams: { temperature: 0 } }] } } }))
 
 // One Pi process, one prompt per entry: what each prompt's run did, up to agent_settled.
 // settles: how many agent_settled to wait for, when a run starts another. linger: how long
-// to stay after the last, to see a request that shouldn't come.
-const session = (steps, prompts = ["go"], first = [], settings = {}, { settles = prompts.length, linger = 0 } = {}) => new Promise((resolve) => {
+// to stay after the last, to see a request that shouldn't come. sessionArgs: how Pi keeps
+// the session, for a case that reopens one.
+const session = (steps, prompts = ["go"], first = [], settings = {}, { settles = prompts.length, linger = 0, sessionArgs = ["--no-session"] } = {}) => new Promise((resolve) => {
   script = steps
   served = 0
   bodies = []
   writeFileSync(`${work}/agent/settings.json`, JSON.stringify(settings))
-  const pi = spawn("pi", ["--mode", "rpc", "--no-session", "--no-extensions", ...first.flatMap((e) => ["-e", e]), "-e", `${root}/pi/guard.js`, "-e", `${root}/pi/edit.js`, "--model", "mock/m"], { cwd: proj, env: { ...process.env, PI_CODING_AGENT_DIR: `${work}/agent` }, stdio: ["pipe", "pipe", "ignore"] })
+  const pi = spawn("pi", ["--mode", "rpc", ...sessionArgs, "--no-extensions", ...first.flatMap((e) => ["-e", e]), "-e", `${root}/pi/guard.js`, "-e", `${root}/pi/edit.js`, "--model", "mock/m"], { cwd: proj, env: { ...process.env, PI_CODING_AGENT_DIR: `${work}/agent` }, stdio: ["pipe", "pipe", "ignore"] })
   const runs = []
   const fresh = () => ({ tools: [], notes: [], aborted: null, retries: 0, stops: [] })
   let run = fresh()
@@ -254,6 +255,49 @@ expect("a run that keeps repeating did not stop after 3", bodies.length === 3 &&
 // The person's own prompt: not stopped, and it runs to the limit as before.
 ;[r] = await session(["repeat"], ["go"], [commandsExt], { httpIdleTimeoutMs: 1200000 }, { linger: 200 })
 expect("the person's own prompt was stopped", bodies.length === 1 && r.aborted === false && r.stops[0] === "length" && !r.notes.some((n) => n.includes("repeating")), { requests: bodies.length, r })
+
+// A cut-off during a command: the model is asked for a smaller change, and every later
+// request has the lower limit. The session's own record keeps Pi's text.
+const limitOf = (body) => body?.max_completion_tokens ?? body?.max_tokens
+const piAsks = "Re-issue the tool call"
+const smaller = "Make a smaller change"
+const toolTexts = (body) => (body?.messages ?? []).filter((m) => m.role === "tool").map((m) => JSON.stringify(m.content))
+const fullLimit = JSON.parse(readFileSync(`${work}/agent/models.json`, "utf8")).providers.mock.models[0].maxTokens
+;[r] = await session(["read", "cut", "read", "text"], ["/dev-init"], [commandsExt], { httpIdleTimeoutMs: 1200000 })
+expect("the temperature did not go up after a cut-off, and only then", bodies[0]?.temperature === 0 && bodies[1]?.temperature === 0 && bodies[2]?.temperature === 0.3 && bodies[3]?.temperature === 0.3, bodies.map((b) => b.temperature))
+expect("the requests before a cut-off did not keep the limit", limitOf(bodies[0]) === fullLimit && limitOf(bodies[1]) === fullLimit, bodies.map(limitOf))
+expect("the request after a cut-off did not have the lower limit", limitOf(bodies[2]) === 4096, bodies.map(limitOf))
+expect("a later request did not keep the lower limit", limitOf(bodies[3]) === 4096, bodies.map(limitOf))
+expect("the model was still told to re-issue", !toolTexts(bodies[2]).some((t) => t.includes(piAsks)) && !toolTexts(bodies[3]).some((t) => t.includes(piAsks)), toolTexts(bodies[3]))
+expect("the model was not asked for a smaller change", toolTexts(bodies[2]).some((t) => t.includes(smaller)), toolTexts(bodies[2]))
+expect("the other call's result changed", toolTexts(bodies[2]).filter((t) => t.includes(smaller)).length === 1, toolTexts(bodies[2]))
+expect("the session's record of the result changed", r.tools[1]?.isError === true && r.tools[1].text.includes(piAsks), r.tools[1])
+
+// The person's own prompt: Pi's text and the full limit, as before.
+;[r] = await session(["cut", "text"], ["go"], [commandsExt], { httpIdleTimeoutMs: 1200000 })
+expect("the person's own prompt lost the limit", limitOf(bodies[1]) === fullLimit && bodies[1]?.temperature === 0, bodies.map(limitOf))
+expect("the person's own prompt lost Pi's text", toolTexts(bodies[1]).some((t) => t.includes(piAsks)), toolTexts(bodies[1]))
+
+// Always cut off: the third ends the run, and nothing follows. A runaway in text counts too.
+runs = await session(["cut"], ["/dev-init"], [commandsExt], { httpIdleTimeoutMs: 1200000 }, { linger: 500 })
+expect("three cut-offs did not stop at three requests", bodies.length === 3 && runs[0]?.notes.some((n) => n.includes("This run stops here.")), { requests: bodies.length, notes: runs[0]?.notes })
+expect("a cut-off was not counted out loud", runs[0]?.notes.some((n) => n.includes("(1 of 3)")) && runs[0]?.notes.some((n) => n.includes("(2 of 3)")), runs[0]?.notes)
+runs = await session(["repeat", "cut", "cut", "text"], ["/dev-init"], [commandsExt], { httpIdleTimeoutMs: 1200000 }, { settles: 2, linger: 500 })
+expect("a runaway and two cut-offs did not stop at three requests", bodies.length === 3 && runs.at(-1)?.notes.some((n) => n.includes("This run stops here.")), { requests: bodies.length, notes: runs.at(-1)?.notes })
+;[r] = await session(["cut", "cut", "text"], ["/dev-init"], [commandsExt], { httpIdleTimeoutMs: 1200000 })
+expect("two cut-offs ended the run", bodies.length === 3 && r.stops.at(-1) === "stop" && !r.notes.some((n) => n.includes("This run stops here.")), { requests: bodies.length, r })
+
+// A session reopened with pi --continue, after that stop: the context still holds the
+// cut-offs, so it keeps the limit and the text, while its count starts again.
+const sessions = `${work}/sessions`
+await session(["cut"], ["/dev-init"], [commandsExt], { httpIdleTimeoutMs: 1200000 }, { linger: 500, sessionArgs: ["--session-dir", sessions] })
+;[r] = await session(["cut", "cut", "text"], ["/dev-init"], [commandsExt], { httpIdleTimeoutMs: 1200000 }, { sessionArgs: ["--session-dir", sessions, "--continue"] })
+expect("a reopened session lost the lower limit", limitOf(bodies[0]) === 4096 && bodies[0]?.temperature === 0.3, bodies.map(limitOf))
+expect("a reopened session did not hold the three cut-offs", toolTexts(bodies[0]).filter((t) => t.includes(smaller)).length === 3 && !toolTexts(bodies[0]).some((t) => t.includes(piAsks)), toolTexts(bodies[0]))
+const answered = new Set(bodies[0].messages.filter((m) => m.role === "tool").map((m) => m.tool_call_id))
+const calledIds = bodies[0].messages.flatMap((m) => m.tool_calls ?? []).map((c) => c.id)
+expect("a reopened session has a call with no answer", calledIds.length === 3 && calledIds.every((id) => answered.has(id)), { calledIds, answered: [...answered] })
+expect("a reopened session's count did not start again", bodies.length === 3 && r.stops.at(-1) === "stop" && !r.notes.some((n) => n.includes("This run stops here.")), { requests: bodies.length, r })
 
 // A stuck step: the 5th failing test run carries the offer, once, and test-open.sh waits for it.
 const offer = "This step's tests have now failed"

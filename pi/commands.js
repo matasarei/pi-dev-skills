@@ -16,6 +16,11 @@
 // off for the person's own prompts: the nudge asks for a tool call, which only makes
 // sense in a step.
 //
+// A tool call that runs to the limit can't be stopped, since the server holds its
+// arguments back, so once one is in the context the model is asked for a smaller change
+// at a lower limit and a higher temperature (pi/cut-off.js). It shares the runaway's
+// count, and it's off for the person's own prompts too.
+//
 // It also counts a step's failing test runs (pi/failing-runs.js), and on the 5th tells
 // the model about lib/test-open.sh, which it refuses before then.
 
@@ -23,6 +28,7 @@ import { execFileSync } from "node:child_process"
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { dirname, isAbsolute, join } from "node:path"
 import { fileURLToPath } from "node:url"
+import { isCutOff, withRetrySettings, withSmallerAsk } from "./cut-off.js"
 import { description, expandSkill } from "./expand.js"
 import { failedTestRun, OFFER, OFFER_AT } from "./failing-runs.js"
 import { idleProblem, isLocalUrl } from "./idle-timeout.js"
@@ -229,6 +235,8 @@ export default function devCommands(pi) {
   let stopped = false
   let runaways = 0
   let watch = null
+  // A tool call cut off at the output limit is in the context of the request being built.
+  let cutOffInContext = false
   const say = (ctx, msg, level) => {
     if (ctx?.ui?.notify) ctx.ui.notify(msg, level)
     else console.error(msg)
@@ -239,6 +247,7 @@ export default function devCommands(pi) {
     armed = watching = nudged = stopped = false
     runaways = 0
     watch = null
+    cutOffInContext = false
   })
   pi.on?.("tool_call", (event, ctx) => gate(state, event, ctx?.cwd || process.cwd()))
   // The 5th failing test run of a step: the only place the model hears of test-open.sh.
@@ -268,6 +277,26 @@ export default function devCommands(pi) {
     say(ctx, `A reply started repeating itself, so it was stopped (${runaways} of ${STOP_AT}).`, "warning")
     ctx.abort()
   })
+  // A cut-off is a runaway the watch couldn't see, so it shares the count. Pi goes on by
+  // itself, so only the last one needs stopping.
+  pi.on?.("message_end", (event, ctx) => {
+    if (!watching || !isCutOff(event.message)) return
+    runaways++
+    say(ctx, `A tool call ran to the output limit (${runaways} of ${STOP_AT}).`, "warning")
+    if (runaways < STOP_AT) return
+    stopped = true
+    ctx.abort()
+  })
+  // A cut-off in the context: see pi/cut-off.js. The session keeps Pi's text, since this
+  // only changes what's sent.
+  pi.on?.("context", (event) => {
+    cutOffInContext = false
+    if (!watching) return undefined
+    const { messages, cutOff } = withSmallerAsk(event.messages)
+    cutOffInContext = cutOff
+    return cutOff ? { messages } : undefined
+  })
+  pi.on?.("before_provider_request", (event) => (cutOffInContext ? withRetrySettings(event.payload) : undefined))
   pi.on?.("agent_settled", (_event, ctx) => {
     if (!stopped) return
     stopped = false
