@@ -49,12 +49,14 @@ export function withSmallerAsk(messages) {
 
 // A provider's request with its output limit lowered and its temperature raised, never
 // the other way. It names the limit one of two ways, depending on the server. A
-// temperature the model doesn't set stays unset: the server's default is unknown here.
+// temperature that isn't a number, unset or null, stays as it is: the server's default is
+// unknown here.
 export function withRetrySettings(payload) {
   const changed = {}
   for (const field of ["max_completion_tokens", "max_tokens"]) {
     if (payload?.[field] > RETRY_LIMIT) changed[field] = RETRY_LIMIT
   }
-  if (payload?.temperature < RETRY_TEMPERATURE) changed.temperature = RETRY_TEMPERATURE
+  const temperature = payload?.temperature
+  if (typeof temperature === "number" && temperature < RETRY_TEMPERATURE) changed.temperature = RETRY_TEMPERATURE
   return Object.keys(changed).length ? { ...payload, ...changed } : payload
 }

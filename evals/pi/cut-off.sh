@@ -99,6 +99,7 @@ for (const [name, given, want] of [
   expect(`${name}: the input was changed`, payload.temperature === given, payload)
 }
 expect("a temperature the model doesn't set was added", !("temperature" in withRetrySettings({ max_tokens: 16384 })), "added")
+expect("a null temperature was changed", withRetrySettings({ temperature: null }).temperature === null, withRetrySettings({ temperature: null }).temperature)
 
 for (const f of fails) console.log(`FAIL  ${f}`)
 process.exit(fails.length ? 1 : 0)
