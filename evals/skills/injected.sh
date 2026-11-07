@@ -119,7 +119,9 @@ for skill in "$skills"/*/SKILL.md; do
     printf '%s\n' "$block" | grep -q '^BRANCH step/plan-1 — cut from main' \
       || note "dev-implement: the block has no BRANCH line from step-start.sh: '$(printf '%s\n' "$block" | grep -m1 'BRANCH')'"
     printf '%s\n' "$block" | grep -q '^STOP ' && note "dev-implement: a clean project got a STOP: $(printf '%s\n' "$block" | grep -m1 '^STOP ')"
-    printf '%s\n' "$block" | grep -qF "bash $root/lib/tick.sh" || note "dev-implement: the block does not name $root/lib/tick.sh"
+    # Quoted the way the model gets it, should this checkout's path need quoting.
+    tick="bash $(node -e 'import(process.argv[1]).then((m) => console.log(m.shellWord(process.argv[2])))' "$root/pi/lib-path.js" "$root/lib")/tick.sh"
+    printf '%s\n' "$block" | grep -qF "$tick" || note "dev-implement: the block does not name $tick"
     git -C "$proj" switch -q main
   fi
   if [ "$name" = dev-plan ]; then
