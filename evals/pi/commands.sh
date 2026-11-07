@@ -134,6 +134,9 @@ const { LIB } = await import(new URL("lib-path.js", new URL(ext, "file:///")).hr
 await expect("2", "bash", { command: `cd . && bash ${LIB}/tick.sh ${plan} 2 "x"` }, "tick.sh for step 2 by its path")
 await expect("2", "bash", { command: `bash ${LIB}/branch.sh .tasks/plan.md 2` }, "branch.sh for step 2 by its path")
 await expect("0", "bash", { command: `bash ${LIB}/tick.sh ${plan} 1 "x"` }, "tick.sh for this step by its path")
+// A checkout path with a space reaches the model quoted (shellWord).
+await expect("2", "bash", { command: `bash '/my dir/lib'/tick.sh ${plan} 2 "x"` }, "tick.sh for step 2 by a quoted path")
+await expect("0", "bash", { command: `bash '/my dir/lib'/tick.sh ${plan} 1 "x"` }, "tick.sh for this step by a quoted path")
 await expect("2", "bash", { command: `bash ${lib}/task-step.sh .tasks/plan.md --step 2` }, "task-step.sh --step 2")
 await expect("2", "bash", { command: `bash ${lib}/step-budget.sh ${plan} 2` }, "step-budget.sh for step 2")
 await expect("0", "bash", { command: `bash ${lib}/step-budget.sh ${plan} 1` }, "step-budget.sh for this step")
