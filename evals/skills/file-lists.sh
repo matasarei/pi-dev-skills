@@ -57,14 +57,14 @@ flat "$impl" | grep -q 'NO STEPS → print Next: /dev-plan <task-file> and stop'
 grep -q '^!`.*step-start.sh \$ARGUMENTS' "$impl" || note 'dev-implement: no step-start.sh injection — the model would be left to run branch.sh itself'
 flat "$impl" | grep -q 'never run branch.sh' || note 'dev-implement: does not tell the model never to run branch.sh itself'
 flat "$impl" | grep -q 'test.sh --scoped <name>' || note 'dev-implement: the scoped test command is not spelled out'
-flat "$impl" | grep -q 'never cat them' || note 'dev-implement: no rule against reading the dev-lib scripts'
+flat "$impl" | grep -q 'never cat them' || note 'dev-implement: no rule against reading the lib scripts'
 # The bench's model built its own objects in new tests, and the file's setup was what made them work:
 # 11-13 tests failed for a reason its code could not fix, and they hid its one real bug.
 flat "$impl" | grep -q 'New tests use the setup their file already has' || note 'dev-implement: does not tell new tests to reuse their file'\''s setup'
 # Red first: the step's Red: test runs before any production line, and a test
 # that already passes stops the build. The import sentence it replaced was
 # PHP-only; lint and /dev-review C5 still catch a broken import.
-grep -q 'dev-lib}/test.sh --red <name>' "$impl" || note 'dev-implement: the red-first command is not spelled out'
+grep -q '$DEV_SKILLS_LIB/test.sh --red <name>' "$impl" || note 'dev-implement: the red-first command is not spelled out'
 flat "$impl" | grep -q 'RED NOT PROVEN' || note 'dev-implement: no rule for a test that passed before the change'
 # RED UNCLEAR has two causes that need opposite fixes: a test that will not load
 # is fixed in the test, a profile with no testScoped {name} in the profile.
@@ -74,8 +74,8 @@ flat "$impl" | grep -q 'cross-namespace references' && note 'dev-implement: the 
 # /dev-fix's Mode B names its lint and scoped-test commands in full: a bare
 # "lint.sh <path>" and a bare "testScoped" sent a model to read scripts.
 fix="$skills/dev-fix/SKILL.md"
-grep -q 'dev-lib}/lint.sh <path>' "$fix" || note 'dev-fix: Mode B does not spell the lint command'
-grep -q 'dev-lib}/test.sh --scoped <name>' "$fix" || note 'dev-fix: Mode B does not spell the scoped test command'
+grep -q '$DEV_SKILLS_LIB/lint.sh <path>' "$fix" || note 'dev-fix: Mode B does not spell the lint command'
+grep -q '$DEV_SKILLS_LIB/test.sh --scoped <name>' "$fix" || note 'dev-fix: Mode B does not spell the scoped test command'
 # Mode A writes a plan plan-check.sh reads, so its step lines include Red:.
 flat "$fix" | grep -q 'Test:, Red:' || note 'dev-fix: the Mode A step lines do not include Red:'
 
@@ -83,14 +83,14 @@ flat "$fix" | grep -q 'Test:, Red:' || note 'dev-fix: the Mode A step lines do n
 # a rule left out, is what a byte-cap trim removes first.
 pr="$skills/dev-pr/SKILL.md"
 manual="$skills/dev-plan-manual/SKILL.md"
-grep -q 'dev-lib}/verify-clean.sh' "$pr" || note 'dev-pr: verify-clean.sh is named without its invocation'
+grep -q '$DEV_SKILLS_LIB/verify-clean.sh' "$pr" || note 'dev-pr: verify-clean.sh is named without its invocation'
 # Red first reaches the pull request: a step that planned a red test and has no
 # proven receipt stops here, and the body quotes the red line beside the green.
 flat "$pr" | grep -q 'red-planned: names a test and red:' || note 'dev-pr: no stop for a planned red test with no proven receipt'
 flat "$pr" | grep -q 'the tested: verdict, and red:' || note 'dev-pr: the Testing section does not quote red:'
-grep -q 'dev-lib}/plan-check.sh <file>' "$manual" || note 'dev-plan-manual: plan-check.sh is named without its invocation'
-grep -q 'dev-lib}/step-budget.sh <file> <n>' "$manual" || note 'dev-plan-manual: step-budget.sh is named without its invocation'
-flat "$plan" | grep -q 'never cat them' || note 'dev-plan: no rule against reading the dev-lib scripts'
+grep -q '$DEV_SKILLS_LIB/plan-check.sh <file>' "$manual" || note 'dev-plan-manual: plan-check.sh is named without its invocation'
+grep -q '$DEV_SKILLS_LIB/step-budget.sh <file> <n>' "$manual" || note 'dev-plan-manual: step-budget.sh is named without its invocation'
+flat "$plan" | grep -q 'never cat them' || note 'dev-plan: no rule against reading the lib scripts'
 
 # The manual plan keeps the same step shape — task-step.sh, step-budget.sh and
 # plan-check.sh parse it the same way — plus the two lines that are only its:
@@ -102,7 +102,7 @@ grep -qE '^[0-9]+\. \[ \] <' "$manual" || note 'dev-plan-manual: the template st
 grep -qE '^ +Walkthrough:' "$manual" || note 'dev-plan-manual: no placeholder line for the walkthrough written later'
 # The developer writes the code, so the developer runs red first — spelled out,
 # or a coach session skips it the way a builder would.
-grep -q 'dev-lib}/test.sh --red <name>' "$manual" || note 'dev-plan-manual: Mode B does not spell the red-first command'
+grep -q '$DEV_SKILLS_LIB/test.sh --red <name>' "$manual" || note 'dev-plan-manual: Mode B does not spell the red-first command'
 # The walkthrough sits inside a step block, where steps.awk reads Create:,
 # Modify: and Test: as path lists wherever they appear. Its labels must not
 # collide with those three, and the skill has to say so.

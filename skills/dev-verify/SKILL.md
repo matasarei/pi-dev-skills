@@ -30,7 +30,7 @@ One row per acceptance criterion, per command or page the change touches, and pe
 
 ## Step 3 — Run the tests
 
-`bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/test.sh` — or `--scoped <name>` first, then widen.
+`bash $DEV_SKILLS_LIB/test.sh` — or `--scoped <name>` first, then widen.
 
 - **Quote its verdict line.** `TEST PASS | OK (43 tests, 118 assertions)` is evidence; "tests pass" is not.
 - `TEST TIMEOUT` is a **failure**; say what it was doing when it hung.
@@ -42,7 +42,7 @@ One row per acceptance criterion, per command or page the change touches, and pe
 By `runtime.kind`:
 
 - **`cli`** — run it twice. Once with bad input: a clear error **and** a non-zero exit code, checked directly (a pipe hides it). Once for real, then check the effect — the row written, the file produced.
-- **`http`** — status 200 proves nothing (soft errors, auth drops to /login). Verify route via `bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/http-check.sh <url> --require "<expected text>"` from the **host**. Must prove expected domain content rendered. Check effect. Say request-level, not user-level.
+- **`http`** — status 200 proves nothing (soft errors, auth drops to /login). Verify route via `bash $DEV_SKILLS_LIB/http-check.sh <url> --require "<expected text>"` from the **host**. Must prove expected domain content rendered. Check effect. Say request-level, not user-level.
 - **`library`** — call the public API with ordinary and edge inputs.
 - **`hosted`** — record `HOSTED`. Lint every changed file, confirm `version.php` was bumped if `classes/` or `db/` changed, confirm new classes sit where their namespace says. **Say that behaviour was not verified.**
 
@@ -72,8 +72,8 @@ Lead with exactly one: **Works** — the checks that matter passed and the chang
 
 Profile:
 
-!`bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/profile.sh`
+!`bash $DEV_SKILLS_LIB/profile.sh`
 
 Changed, by risk:
 
-!`bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/changed.sh`
+!`bash $DEV_SKILLS_LIB/changed.sh`

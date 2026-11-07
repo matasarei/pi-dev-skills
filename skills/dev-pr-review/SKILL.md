@@ -24,7 +24,7 @@ The path exists → **ask before reusing it.** Work in worktree. A `compose` `ex
 
 ## Step 3 — Read, in order
 
-`bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/changed.sh <baseRefName>` inside the worktree. **Read the top 3 in full** plus the code around them; the rest is judged from the diff, and the review says so.
+`bash $DEV_SKILLS_LIB/changed.sh <baseRefName>` inside the worktree. **Read the top 3 in full** plus the code around them; the rest is judged from the diff, and the review says so.
 
 ## Step 4 — The checklist
 
@@ -44,7 +44,7 @@ One file at a time. Answer yes or no.
 
 **BLOCKER** carries a **concrete failure scenario** — the inputs or state, and what goes wrong; no scenario → **SMELL**. No NIT here; nits are the bot's job.
 
-Empty `.devskills/findings.md` first, one line per finding — `SEVERITY | path:line | one sentence | EVIDENCE: <the exact line>` — then `bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/findings-check.sh .devskills/findings.md` and report only what survives.
+Empty `.devskills/findings.md` first, one line per finding — `SEVERITY | path:line | one sentence | EVIDENCE: <the exact line>` — then `bash $DEV_SKILLS_LIB/findings-check.sh .devskills/findings.md` and report only what survives.
 
 ## Step 6 — Deduplicate against the ledger
 
@@ -70,8 +70,8 @@ Then ask once: `Worktree left at <path>. Remove it?` — **never remove it witho
 
 Comments already on it:
 
-!`bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/pr-comments.sh $ARGUMENTS 2>&1`
+!`bash $DEV_SKILLS_LIB/pr-comments.sh $ARGUMENTS 2>&1`
 
 Profile:
 
-!`bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/profile.sh`
+!`bash $DEV_SKILLS_LIB/profile.sh`

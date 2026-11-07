@@ -21,8 +21,8 @@ When the brief is a sentence, `#<issue>`, or a bug report:
    - Acceptance criteria (`- [ ]` lines), exact check commands, and what not to touch.
 3. **Check plan**:
    ```bash
-   bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/plan-check.sh .tasks/fix-<slug>.md
-   bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/step-budget.sh .tasks/fix-<slug>.md 1
+   bash $DEV_SKILLS_LIB/plan-check.sh .tasks/fix-<slug>.md
+   bash $DEV_SKILLS_LIB/step-budget.sh .tasks/fix-<slug>.md 1
    ```
 4. **Report**: diagnosis, evidence, and `Next: /dev-implement .tasks/fix-<slug>.md`.
 
@@ -31,9 +31,9 @@ When the brief is a sentence, `#<issue>`, or a bug report:
 When the brief said `FINDINGS` or `EMPTY` — the verified list is injected below from `findings-check.sh`. Never re-plan these as a task file; they are already located and checked.
 
 1. **Which to take**: BLOCKER and WARNING in file order; NIT and SMELL listed and left.
-2. **Fix**: smallest change per finding; `sed -n '<line-15>,<line+15>p' <path>`. Lint with `bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/lint.sh <path>`, then `bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/test.sh --scoped <name>`.
+2. **Fix**: smallest change per finding; `sed -n '<line-15>,<line+15>p' <path>`. Lint with `bash $DEV_SKILLS_LIB/lint.sh <path>`, then `bash $DEV_SKILLS_LIB/test.sh --scoped <name>`.
 3. **Commit**: `git commit -m "Fix: <the finding's sentence>"`. Hook failure skips finding. Never `--no-verify`.
-4. **Prove it**: `bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/findings-check.sh <findings-file>`, then `bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/test.sh` — quote its verdict line.
+4. **Prove it**: `bash $DEV_SKILLS_LIB/findings-check.sh <findings-file>`, then `bash $DEV_SKILLS_LIB/test.sh` — quote its verdict line.
 5. **Report**: row per finding (fixed `<sha>` | resolved | skipped | left). Append repo trap to `.devskills/learned.md`, then `tail -20` back into place.
 6. **Next**: `Next: /dev-review` when a BLOCKER was fixed; otherwise `Next: /dev-pr`.
 
@@ -53,7 +53,7 @@ Root — the plan goes under it, never `~`:
 
 Profile:
 
-!`bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/profile.sh`
+!`bash $DEV_SKILLS_LIB/profile.sh`
 
 Branch and working tree:
 
@@ -61,8 +61,8 @@ Branch and working tree:
 
 Input / brief:
 
-!`bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/plan-input.sh $ARGUMENTS 2>&1`
+!`bash $DEV_SKILLS_LIB/plan-input.sh $ARGUMENTS 2>&1`
 
 Findings, verified (when continuing after review):
 
-!`bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/findings-check.sh $ARGUMENTS 2>&1`
+!`bash $DEV_SKILLS_LIB/findings-check.sh $ARGUMENTS 2>&1`

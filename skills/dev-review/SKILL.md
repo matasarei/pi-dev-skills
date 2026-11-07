@@ -34,10 +34,10 @@ Answer yes or no. Do not weigh, rank or reconsider — just answer.
 
 ## C5 is grep, not judgement
 
-For every renamed or removed symbol, grep the files the current step names — `bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/task-step.sh <task-file> --paths <n>` lists them — then run:
+For every renamed or removed symbol, grep the files the current step names — `bash $DEV_SKILLS_LIB/task-step.sh <task-file> --paths <n>` lists them — then run:
 
 ```
-bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/callers.sh "<oldname>"
+bash $DEV_SKILLS_LIB/callers.sh "<oldname>"
 ```
 
 Any surviving caller in code, tests/ or views/ is a BLOCKER. Do not reason about reachability — report what callers.sh found.
@@ -54,8 +54,8 @@ SEVERITY | path:line | one sentence on what breaks | EVIDENCE: <the exact line f
 
 ## Finish
 
-1. Lint: `bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/lint.sh` — a failure is a BLOCKER, quoted verbatim. `NO LINT COMMAND` → report the review as **unlinted**.
-2. Verify: `bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/findings-check.sh .devskills/findings.md`
+1. Lint: `bash $DEV_SKILLS_LIB/lint.sh` — a failure is a BLOCKER, quoted verbatim. `NO LINT COMMAND` → report the review as **unlinted**.
+2. Verify: `bash $DEV_SKILLS_LIB/findings-check.sh .devskills/findings.md`
 3. **Report only what step 2 printed.**
 
 Lead with one line — `Ready to push` / `N blockers first` / `Ready, with N warnings` — then the findings, blockers first, the files judged from the diff alone, and whether lint ran. A report file only on a blocker or when asked: `.devskills/reports/review-<branch-slug>-<UTC timestamp>.md`, path printed. Then: `Next: /dev-fix .devskills/findings.md` when anything survived; `Next: /dev-pr` when nothing did. **Manual plan below, not `(none)`** → hand-written code: the findings are theirs to fix by hand; `/dev-fix` named once as theirs to run.
@@ -71,7 +71,7 @@ Lead with one line — `Ready to push` / `N blockers first` / `Ready, with N war
 
 Profile:
 
-!`bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/profile.sh`
+!`bash $DEV_SKILLS_LIB/profile.sh`
 
 Manual plan:
 
@@ -83,8 +83,8 @@ Red receipt:
 
 Queue — rank 1 is highest risk, top-down:
 
-!`bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/changed.sh`
+!`bash $DEV_SKILLS_LIB/changed.sh`
 
 Diff:
 
-!`bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/diff.sh`
+!`bash $DEV_SKILLS_LIB/diff.sh`

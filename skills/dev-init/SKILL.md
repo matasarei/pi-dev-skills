@@ -7,7 +7,7 @@ description: Write this repository's AGENTS.md — the detected commands plus it
 
 `AGENTS.md` is loaded at the start of every session: the build and test commands, and the handful of rules that actually get broken here.
 
-**Content goes in `AGENTS.md` only.** OpenCode reads `AGENTS.md` directly. If existing rules are in `CLAUDE.md` and none in `AGENTS.md`, **move** them into `AGENTS.md`. Never create or write `CLAUDE.md` stubs.
+**Content goes in `AGENTS.md` only.** Pi reads `AGENTS.md` directly. If existing rules are in `CLAUDE.md` and none in `AGENTS.md`, **move** them into `AGENTS.md`. Never create or write `CLAUDE.md` stubs.
 
 ## Step 1 — Map the family to a template
 
@@ -62,7 +62,7 @@ Look, then write what you find — never assume: does the template layer escape 
 
 ## Step 5 — Report
 
-Write `AGENTS.md`. Never create `CLAUDE.md` stubs — OpenCode targets `AGENTS.md` directly. Then report: the family and why, the absolute path written, which commands came out `null`, and what step 4 left as a question. `--dry-run` prints and writes nothing.
+Write `AGENTS.md`. Never create `CLAUDE.md` stubs — Pi reads `AGENTS.md` first. Then report: the family and why, the absolute path written, which commands came out `null`, and what step 4 left as a question. `--dry-run` prints and writes nothing.
 
 ## Rules
 
@@ -76,7 +76,7 @@ Write `AGENTS.md`. Never create `CLAUDE.md` stubs — OpenCode targets `AGENTS.m
 
 Profile:
 
-!`bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/profile.sh`
+!`bash $DEV_SKILLS_LIB/profile.sh`
 
 Existing instruction files:
 

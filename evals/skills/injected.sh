@@ -104,6 +104,7 @@ for skill in "$skills"/*/SKILL.md; do
   # The model is shown this checkout's lib/ as a path. Shown the variable, it
   # sometimes filled in a home of its own and ran whatever copy find turned up.
   printf '%s\n' "$block" | grep -q 'DEV_SKILLS_LIB' && note "$name: the variable reached the block, where the model may fill it in itself: $(printf '%s\n' "$block" | grep -m1 'DEV_SKILLS_LIB')"
+  printf '%s\n' "$block" | grep -qi 'opencode' && note "$name: the block names OpenCode: $(printf '%s\n' "$block" | grep -i -m1 'opencode')"
 
   if grep -q '^!`.*task-step.sh' "$skill" && [ -n "$args" ]; then
     printf '%s\n' "$block" | grep -q '^\*\*Task file:\*\* /' \
