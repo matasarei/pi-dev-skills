@@ -35,7 +35,7 @@ fi
 cat > "$work/run.mjs" <<'JS'
 import { pathToFileURL } from "node:url"
 const [argsModule, piEdit] = process.argv.slice(2)
-const { repairEditArgs, editArgsProblem } = await import(pathToFileURL(argsModule).href)
+const { repairEditArgs, editArgsProblem, withFlatShape } = await import(pathToFileURL(argsModule).href)
 const fails = []
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 const NL = String.fromCharCode(10), TAB = String.fromCharCode(9)
@@ -80,11 +80,15 @@ if (r.edits[0].x !== undefined || Object.getPrototypeOf(r.edits[0]) !== Object.p
 // Escapes in the text survive the reader.
 r = repairEditArgs({ path: "f", edits: '[{"oldText": "say \\"hi\\"", "newText": "tab\\tback\\\\slash \\u0041"}]' })
 if (!same(r.edits, [{ oldText: 'say "hi"', newText: `tab${TAB}back\\slash A` }])) fails.push(`escapes changed: ${JSON.stringify(r.edits)}`)
+// Every refusal ends by asking for the flat shape, which can't nest JSON in a string, and doesn't
+// name write: after "or use write" the bench's model spliced the file from the shell and broke it.
+const ASK = "Send this change again as one edit with path, oldText and newText as plain arguments, without edits. If it is long, add it in parts of about 40 lines, one edit each. Don't rewrite the file from the shell."
+const asks = (t) => t.endsWith(` ${ASK}`) && !t.includes("use write")
 // A later value that is real, different text is a guess either way: refused, in place of keeping the last.
 const differs = { path: "f", edits: '[{"oldText": "a", "newText": "one", "newText": "two"}]' }
 if (typeof repairEditArgs(differs).edits !== "string") fails.push("a repeat with different values was repaired")
 const twice = editArgsProblem?.(differs) ?? ""
-if (!twice.startsWith("edits gives newText twice with different values.") || !twice.includes("Fix the JSON, or use write.")) fails.push(`a repeat with different values was not reported: ${twice}`)
+if (!twice.startsWith("edits gives newText twice with different values.") || !asks(twice)) fails.push(`a repeat with different values was not reported: ${twice}`)
 
 // Stray closers at the end, the bench's commonest failure. One model sent the same call 201 times.
 for (const tail of ["}]}", "}]}]", "}}]", "}", "]}]", "}]  }\n]"]) {
@@ -112,7 +116,7 @@ for (const [what, edits] of [["two edits run together", together], ["an untermin
   if (!(editArgsProblem?.({ path: "f", edits }) ?? "").startsWith("edits is not valid JSON:")) fails.push(`${what} was not reported`)
 }
 const stray = editArgsProblem?.({ path: "f", edits: together }) ?? ""
-if (!/^edits is not valid JSON: .*position \d+/.test(stray) || !stray.includes("Fix the JSON, or use write.")) fails.push(`the stray bracket is not reported with its JSON error: ${stray}`)
+if (!/^edits is not valid JSON: .*position \d+/.test(stray) || !asks(stray)) fails.push(`the stray bracket is not reported with its JSON error: ${stray}`)
 if (!(editArgsProblem?.({ path: "f", edits: "not json at all" }) ?? "").startsWith("edits is not valid JSON:")) fails.push("garbage is not reported")
 // Raw newlines are something the repair handles, so they are not what gets reported: the bench's model
 // was told about a control character when the real problem was further on.
@@ -122,7 +126,32 @@ const quoted = editArgsProblem?.({ path: "f", edits: `"a${NL}b"` }) ?? ""
 if (!quoted.startsWith("edits is not a list of edits:")) fails.push(`a string with a raw newline is not reported as not a list: ${quoted}`)
 // Valid JSON that is not edits at all is reported too, without calling it invalid.
 const num = editArgsProblem?.({ path: "f", edits: "5" }) ?? ""
-if (!num.startsWith("edits is not a list of edits:") || !num.includes("Fix the JSON, or use write.")) fails.push(`a number is not reported: ${num}`)
+if (!num.startsWith("edits is not a list of edits:") || !asks(num)) fails.push(`a number is not reported: ${num}`)
+// The schema the model is sent: the flat oldText/newText pair next to path, edits optional, and a note at the
+// front of the description. In replays of the bench's broken edits, the model sent that shape where it had sent
+// a broken edits string. Nothing else in the definition changes, and the definition given isn't touched.
+const FLAT_NOTE = "For one replacement, pass oldText and newText directly, next to path. Use edits only for several replacements in one call. "
+const plain = { name: "edit", description: "Edit a file.", parameters: { type: "object", required: ["path", "edits"], properties: { path: { type: "string" }, edits: { type: "array" } } }, execute: () => "ran" }
+const before = JSON.stringify(plain)
+const flat = withFlatShape?.(plain)
+if (!flat) fails.push("withFlatShape is missing")
+else {
+  if (flat.description !== FLAT_NOTE + "Edit a file.") fails.push(`the description has no note in front: ${flat.description}`)
+  if (!same(flat.parameters.required, ["path"])) fails.push(`more than path is required: ${JSON.stringify(flat.parameters.required)}`)
+  if (!same(Object.keys(flat.parameters.properties), ["path", "oldText", "newText", "edits"])) fails.push(`the properties are not path, oldText, newText, edits: ${Object.keys(flat.parameters.properties)}`)
+  if (flat.parameters.properties.oldText?.type !== "string" || flat.parameters.properties.newText?.type !== "string") fails.push("oldText and newText are not strings")
+  if (flat.parameters.properties.edits !== plain.parameters.properties.edits || flat.parameters.properties.path !== plain.parameters.properties.path) fails.push("path or edits changed")
+  if (flat.execute !== plain.execute || flat.name !== "edit") fails.push("the rest of the definition changed")
+  if (JSON.stringify(plain) !== before) fails.push("the definition given was changed")
+}
+
+// A schema without path or edits, as a later Pi might have, is left as Pi gives it rather than sent broken.
+for (const odd of [{ name: "edit", description: "d", parameters: { type: "object", properties: { file: { type: "string" } } } }, { name: "edit", description: "d" }]) {
+  let got
+  try { got = withFlatShape?.(odd) } catch (e) { got = e }
+  if (got !== odd) fails.push(`a schema without path and edits was changed: ${got instanceof Error ? got.message : JSON.stringify(got)}`)
+}
+
 // Everything the repair or Pi can use has no problem.
 for (const ok of [{ path: "f", edits: raw }, { path: "f", edits: '[{"oldText":"a","newText":"b"}]' }, { path: "f", edits: arr }, { path: "f", oldText: "a", newText: "b" }, { path: "f", edits: `{"oldText": "a${NL}b", "newText": "c"}` }, { path: "f", edits: "junk", oldText: "a", newText: "b" }, null])
   if (editArgsProblem?.(ok) !== null) fails.push(`a usable shape was reported: ${JSON.stringify(ok)}`)
@@ -141,6 +170,10 @@ if (piEdit) try {
     fails.push("through Pi's shim, stray closers are not repaired")
   if (!same(prepare({ path: "f", oldText: "a", newText: "b" }).edits, [{ oldText: "a", newText: "b" }]))
     fails.push("through Pi's shim, legacy oldText/newText is no longer folded in")
+  // Pi's own definition, as pi/edit.js gives it: edits kept as Pi has it, and the flat pair folded in by Pi's shim.
+  const piFlat = withFlatShape?.(base)
+  if (piFlat && piFlat.parameters.properties.edits !== base.parameters.properties.edits) fails.push("through Pi, the flat schema changed edits")
+  if (piFlat && (base.parameters.required ?? []).length !== 2) fails.push(`through Pi, its own definition was changed: ${JSON.stringify(base.parameters.required)}`)
   console.log("edit: checked through Pi's own edit shim too")
 } catch (e) {
   fails.push(`through Pi's shim: ${e.message}`)

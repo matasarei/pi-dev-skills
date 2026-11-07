@@ -141,11 +141,47 @@ export function repairEditArgs(args) {
 // is nothing to report. Pi's validation would say "edits.0: expected object, got
 // string", which names no real problem, and the bench's model sent one such call
 // 179 times. Legacy oldText/newText is fine: Pi's shim uses those and drops `edits`.
+//
+// The refusal asks for that flat shape. Its values are plain arguments, so there's
+// no JSON inside a string to get wrong, which the bench's model gets wrong in long
+// edits. It doesn't name write: told "or use write", the model spliced the file from
+// the shell instead and broke it. The README has the figures.
+const ASK = "Send this change again as one edit with path, oldText and newText as plain arguments, without edits. If it is long, add it in parts of about 40 lines, one edit each. Don't rewrite the file from the shell."
+
 export function editArgsProblem(args) {
   const repaired = repairEditArgs(args)
   if (!repaired || typeof repaired.edits !== "string") return null
   if (typeof repaired.oldText === "string" && typeof repaired.newText === "string") return null
   const { problem } = readEdits(repaired.edits)
-  if (problem) return `${problem} Fix the JSON, or use write.`
-  return `edits is not a list of edits: it reads as ${repaired.edits.slice(0, 40)}. Fix the JSON, or use write.`
+  if (problem) return `${problem} ${ASK}`
+  return `edits is not a list of edits: it reads as ${repaired.edits.slice(0, 40)}. ${ASK}`
+}
+
+// The edit definition with the flat pair in its schema: top-level oldText and newText
+// after path, only path required, and a note at the front of its description. Pi's
+// shim already folds that pair into edits, but its schema only shows edits, and the
+// bench's model sends edits as a JSON string, which it nests wrongly when the text is
+// long. The descriptions are the ones replayed on the bench's model, and the README
+// has what that showed. path and edits are Pi's own, and the definition given isn't
+// changed.
+const FLAT_NOTE = "For one replacement, pass oldText and newText directly, next to path. Use edits only for several replacements in one call. "
+
+export function withFlatShape(definition) {
+  const params = definition.parameters
+  // A schema of another shape, from a later Pi, is left as it is rather than sent broken.
+  if (!params?.properties?.path || !params.properties.edits || typeof definition.description !== "string") return definition
+  return {
+    ...definition,
+    description: FLAT_NOTE + definition.description,
+    parameters: {
+      ...params,
+      required: ["path"],
+      properties: {
+        path: params.properties.path,
+        oldText: { type: "string", description: "Exact text to replace, for one replacement. It must be unique in the file. Use with newText instead of edits." },
+        newText: { type: "string", description: "Replacement text for oldText." },
+        edits: params.properties.edits,
+      },
+    },
+  }
 }

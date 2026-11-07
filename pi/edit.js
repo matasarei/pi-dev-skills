@@ -6,16 +6,19 @@
 // This registers Pi's edit definition under the same name — an extension tool
 // replaces the built-in of that name — with prepareArguments running
 // repairEditArgs (pi/edit-args.js) first and Pi's own shim after it. A string it
-// cannot repair fails here with its JSON error; nothing is guessed. Nothing else
-// about the tool changes: its schema, its execution and its rendering are Pi's.
+// cannot repair fails here with its JSON error; nothing is guessed.
+//
+// Its schema also shows the flat oldText/newText pair Pi's shim already takes
+// (withFlatShape, pi/edit-args.js), so a long change needn't be JSON inside a
+// string. Its execution and its rendering are Pi's.
 
 import { createEditToolDefinition } from "@earendil-works/pi-coding-agent"
-import { repairEditArgs, editArgsProblem } from "./edit-args.js"
+import { repairEditArgs, editArgsProblem, withFlatShape } from "./edit-args.js"
 
 function definition(cwd) {
   const base = createEditToolDefinition(cwd)
   const prepare = base.prepareArguments
-  return {
+  return withFlatShape({
     ...base,
     prepareArguments: (args) => {
       const problem = editArgsProblem(args)
@@ -23,7 +26,7 @@ function definition(cwd) {
       const repaired = repairEditArgs(args)
       return prepare ? prepare(repaired) : repaired
     },
-  }
+  })
 }
 
 export default function devEdit(pi) {
