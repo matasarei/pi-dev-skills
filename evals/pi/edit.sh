@@ -145,6 +145,13 @@ else {
   if (JSON.stringify(plain) !== before) fails.push("the definition given was changed")
 }
 
+// A schema without path or edits, as a later Pi might have, is left as Pi gives it rather than sent broken.
+for (const odd of [{ name: "edit", description: "d", parameters: { type: "object", properties: { file: { type: "string" } } } }, { name: "edit", description: "d" }]) {
+  let got
+  try { got = withFlatShape?.(odd) } catch (e) { got = e }
+  if (got !== odd) fails.push(`a schema without path and edits was changed: ${got instanceof Error ? got.message : JSON.stringify(got)}`)
+}
+
 // Everything the repair or Pi can use has no problem.
 for (const ok of [{ path: "f", edits: raw }, { path: "f", edits: '[{"oldText":"a","newText":"b"}]' }, { path: "f", edits: arr }, { path: "f", oldText: "a", newText: "b" }, { path: "f", edits: `{"oldText": "a${NL}b", "newText": "c"}` }, { path: "f", edits: "junk", oldText: "a", newText: "b" }, null])
   if (editArgsProblem?.(ok) !== null) fails.push(`a usable shape was reported: ${JSON.stringify(ok)}`)

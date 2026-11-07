@@ -169,6 +169,8 @@ const FLAT_NOTE = "For one replacement, pass oldText and newText directly, next 
 
 export function withFlatShape(definition) {
   const params = definition.parameters
+  // A schema of another shape, from a later Pi, is left as it is rather than sent broken.
+  if (!params?.properties?.path || !params.properties.edits || typeof definition.description !== "string") return definition
   return {
     ...definition,
     description: FLAT_NOTE + definition.description,
