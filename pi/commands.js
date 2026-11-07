@@ -9,6 +9,8 @@
 // DEV_SKILLS_LIB points there, and DEV_SKILLS_CONTEXT carries the active
 // model's window, which profile.sh and step-budget.sh size steps against.
 // Both are also set on process.env, which the model's own bash calls inherit.
+// The model itself is shown lib/ as an absolute path, never the variable
+// (pi/lib-path.js).
 //
 // During a command it also stops a reply that repeats itself (pi/runaway.js), which
 // would otherwise run to the output limit and end the session. Pi leaves the stopped
@@ -32,11 +34,11 @@ import { isCutOff, withRetrySettings, withSmallerAsk } from "./cut-off.js"
 import { description, expandSkill } from "./expand.js"
 import { failedTestRun, OFFER, OFFER_AT } from "./failing-runs.js"
 import { idleProblem, isLocalUrl } from "./idle-timeout.js"
+import { LIB as lib } from "./lib-path.js"
 import { createWatch, NUDGE, STOP_AT } from "./runaway.js"
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const skills = join(root, "skills")
-const lib = join(root, "lib")
 
 // The skill directories, in name order.
 export function skillNames(dir = skills) {

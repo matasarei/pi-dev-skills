@@ -21,6 +21,7 @@ import { spawn } from "node:child_process"
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { pathToFileURL } from "node:url"
+import { LIB, withLibPath } from "./lib-path.js"
 
 const INJECTION = /^!`(.*)`$/
 // The same test injected.sh made: a command that starts with gh, or runs gh as a word.
@@ -71,18 +72,22 @@ export function run(command, { cwd, env, timeoutMs = TIMEOUT_MS }) {
 
 // The skill as the model reads it. Injections run one at a time, in order, so a
 // later one sees what an earlier one wrote (profile.sh caches the profile).
+// They run with DEV_SKILLS_LIB set, to this checkout's lib/ when nobody set it,
+// and the other lines name that lib/ as a path (pi/lib-path.js).
 export async function expandSkill(text, { args = "", cwd = process.cwd(), env = {}, offline = false, timeoutMs } = {}) {
+  const lib = env.DEV_SKILLS_LIB ?? process.env.DEV_SKILLS_LIB ?? LIB
+  const runEnv = { ...env, DEV_SKILLS_LIB: lib }
   const lines = body(text).split("\n")
   const out = []
   for (const line of lines) {
     const m = INJECTION.exec(line)
-    if (!m) { out.push(line); continue }
+    if (!m) { out.push(withLibPath(line, lib)); continue }
     const command = m[1].split("$ARGUMENTS").join(args)
     if (offline && NETWORK.test(command)) {
       out.push("(skipped: this injection needs the network)")
       continue
     }
-    out.push(await run(command, { cwd, env, timeoutMs }))
+    out.push(await run(command, { cwd, env: runEnv, timeoutMs }))
   }
   return out.join("\n")
 }

@@ -101,6 +101,9 @@ for skill in "$skills"/*/SKILL.md; do
   printf '%s\n' "$block" | grep -qi '^usage:' && note "$name: an injection printed a usage line — the model is handed the toolkit's problem: $(printf '%s\n' "$block" | grep -i -m1 '^usage:')"
   printf '%s\n' "$block" | grep -q 'command not found' && note "$name: an injection could not run: $(printf '%s\n' "$block" | grep -m1 'command not found')"
   printf '%s\n' "$block" | grep -q '\$ARGUMENTS' && note "$name: a literal \$ARGUMENTS reached the block"
+  # The model is shown this checkout's lib/ as a path. Shown the variable, it
+  # sometimes filled in a home of its own and ran whatever copy find turned up.
+  printf '%s\n' "$block" | grep -q 'DEV_SKILLS_LIB' && note "$name: the variable reached the block, where the model may fill it in itself: $(printf '%s\n' "$block" | grep -m1 'DEV_SKILLS_LIB')"
 
   if grep -q '^!`.*task-step.sh' "$skill" && [ -n "$args" ]; then
     printf '%s\n' "$block" | grep -q '^\*\*Task file:\*\* /' \
@@ -115,6 +118,7 @@ for skill in "$skills"/*/SKILL.md; do
     printf '%s\n' "$block" | grep -q '^BRANCH step/plan-1 — cut from main' \
       || note "dev-implement: the block has no BRANCH line from step-start.sh: '$(printf '%s\n' "$block" | grep -m1 'BRANCH')'"
     printf '%s\n' "$block" | grep -q '^STOP ' && note "dev-implement: a clean project got a STOP: $(printf '%s\n' "$block" | grep -m1 '^STOP ')"
+    printf '%s\n' "$block" | grep -qF "bash $root/lib/tick.sh" || note "dev-implement: the block does not name $root/lib/tick.sh"
     git -C "$proj" switch -q main
   fi
   if [ "$name" = dev-plan ]; then
