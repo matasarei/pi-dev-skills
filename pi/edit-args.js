@@ -143,9 +143,9 @@ export function repairEditArgs(args) {
 // 179 times. Legacy oldText/newText is fine: Pi's shim uses those and drops `edits`.
 //
 // The refusal asks for that flat shape. Its values are plain arguments, so there's
-// no JSON inside a string to get wrong, where half the bench's edits over about
-// 2,500 characters were refused. It doesn't name write: told "or use write", the
-// model spliced the file from the shell instead and broke it.
+// no JSON inside a string to get wrong, which the bench's model gets wrong in long
+// edits. It doesn't name write: told "or use write", the model spliced the file from
+// the shell instead and broke it. The README has the figures.
 const ASK = "Send this change again as one edit with path, oldText and newText as plain arguments, without edits. If it is long, add it in parts of about 40 lines, one edit each. Don't rewrite the file from the shell."
 
 export function editArgsProblem(args) {
@@ -161,9 +161,8 @@ export function editArgsProblem(args) {
 // after path, only path required, and a note at the front of its description. Pi's
 // shim already folds that pair into edits, but its schema only shows edits, and the
 // bench's model sends edits as a JSON string, which it nests wrongly when the text is
-// long. Replaying two such calls with this schema, it sent the flat pair in both runs
-// that finished, where Pi's schema got the broken string again. The descriptions are
-// what was replayed. path and edits are Pi's own, and the definition given isn't
+// long. The descriptions are the ones replayed on the bench's model, and the README
+// has what that showed. path and edits are Pi's own, and the definition given isn't
 // changed.
 const FLAT_NOTE = "For one replacement, pass oldText and newText directly, next to path. Use edits only for several replacements in one call. "
 
