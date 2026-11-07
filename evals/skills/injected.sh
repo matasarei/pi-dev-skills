@@ -85,6 +85,11 @@ for skill in "$skills"/*/SKILL.md; do
   name="$(basename "$(dirname "$skill")")"
   args="$(args_for "$name")"
 
+  # Prose names the lib as shellWord gives it, single-quoted when the checkout path
+  # needs quoting; inside "..." those quotes would become part of the path.
+  dq="$(grep -v '^!`' "$skill" | grep -c '"\$DEV_SKILLS_LIB')"
+  [ "$dq" -eq 0 ] || note "$name: \$DEV_SKILLS_LIB appears inside double quotes $dq time(s) outside an injection"
+
   # $ARGUMENTS outside an injection reaches the model as literal text.
   stray="$(grep -v '^!`' "$skill" | grep -c '\$ARGUMENTS')"
   [ "$stray" -eq 0 ] || note "$name: \$ARGUMENTS appears $stray time(s) outside an injection"
