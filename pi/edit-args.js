@@ -156,3 +156,31 @@ export function editArgsProblem(args) {
   if (problem) return `${problem} ${ASK}`
   return `edits is not a list of edits: it reads as ${repaired.edits.slice(0, 40)}. ${ASK}`
 }
+
+// The edit definition with the flat pair in its schema: top-level oldText and newText
+// after path, only path required, and a note at the front of its description. Pi's
+// shim already folds that pair into edits, but its schema only shows edits, and the
+// bench's model sends edits as a JSON string, which it nests wrongly when the text is
+// long. Replaying two such calls with this schema, it sent the flat pair in both runs
+// that finished, where Pi's schema got the broken string again. The descriptions are
+// what was replayed. path and edits are Pi's own, and the definition given isn't
+// changed.
+const FLAT_NOTE = "For one replacement, pass oldText and newText directly, next to path. Use edits only for several replacements in one call. "
+
+export function withFlatShape(definition) {
+  const params = definition.parameters
+  return {
+    ...definition,
+    description: FLAT_NOTE + definition.description,
+    parameters: {
+      ...params,
+      required: ["path"],
+      properties: {
+        path: params.properties.path,
+        oldText: { type: "string", description: "Exact text to replace, for one replacement. It must be unique in the file. Use with newText instead of edits." },
+        newText: { type: "string", description: "Replacement text for oldText." },
+        edits: params.properties.edits,
+      },
+    },
+  }
+}

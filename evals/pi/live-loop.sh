@@ -180,6 +180,9 @@ writeFileSync(`${proj}/notes.txt`, original)
 ;[r] = await session(["broken", "flat", "text"])
 expect("a flat edit after a broken one failed", r.tools.length === 2 && r.tools[0].isError && !r.tools[1].isError && r.tools[1].text.startsWith("Successfully"), r.tools)
 expect("the flat edit did not write its text", readFileSync(`${proj}/notes.txt`, "utf8") === "bye\n", readFileSync(`${proj}/notes.txt`, "utf8"))
+// The model is sent that shape in the schema too: oldText and newText after path, only path required.
+const sentEdit = bodies[0]?.tools?.find((t) => t.function?.name === "edit")?.function
+expect("the edit schema sent has no flat shape", JSON.stringify(Object.keys(sentEdit?.parameters?.properties ?? {})) === '["path","oldText","newText","edits"]' && JSON.stringify(sentEdit.parameters.required) === '["path"]' && sentEdit.description.startsWith("For one replacement, pass oldText and newText directly"), sentEdit)
 writeFileSync(`${proj}/notes.txt`, original)
 
 // Three failures and then an answer: nothing stops.
