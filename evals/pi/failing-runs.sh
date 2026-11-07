@@ -52,6 +52,8 @@ if (failedTestRun(undefined) || failedTestRun("")) fails.push("no text was count
 
 if (OFFER_AT !== 5) fails.push(`the offer comes after ${OFFER_AT}, and the README says 5`)
 if (!OFFER.includes("test-open.sh") || !OFFER.includes("/dev-pr") || !OFFER.includes(`${OFFER_AT}`)) fails.push(`the offer doesn't say what it is: ${OFFER}`)
+// The script by its path: shown the variable, the model may fill in a home of its own.
+if (!OFFER.includes(`bash ${root}/lib/test-open.sh`) || OFFER.includes("DEV_SKILLS_LIB")) fails.push(`the offer doesn't name ${root}/lib/test-open.sh: ${OFFER}`)
 
 // Refused before the offer, and outside a step. Anything else in a step isn't touched by this.
 const open = { toolName: "bash", input: { command: 'bash "$DEV_SKILLS_LIB/test-open.sh"' } }
@@ -70,7 +72,9 @@ for (const command of ["cat lib/test-open.sh", "shellcheck lib/test-open.sh", "b
     if (gate(state, { toolName: "bash", input: { command } }, process.cwd())?.block) fails.push(`${command} was refused ${what}`)
   }
 }
-for (const command of ["bash lib/test-open.sh", "sh ./lib/test-open.sh", "lib/test-open.sh", "cd x && bash lib/test-open.sh", 'bash "${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/test-open.sh"', "bash $DEV_SKILLS_LIB/test-open.sh 2>&1 | tail -5"]) {
+for (const command of ["bash lib/test-open.sh", "sh ./lib/test-open.sh", "lib/test-open.sh", "cd x && bash lib/test-open.sh", "bash $DEV_SKILLS_LIB/test-open.sh 2>&1 | tail -5", `bash ${root}/lib/test-open.sh`,
+  // The path as shellWord gives it for a checkout path with a space, and quoted whole.
+  "bash '/my dir/lib'/test-open.sh", 'bash "/my dir/lib/test-open.sh"', 'bash "$DEV_SKILLS_LIB/test-open.sh"']) {
   if (!gate(step(0), { toolName: "bash", input: { command } }, process.cwd())?.block) fails.push(`${command} was not refused`)
 }
 

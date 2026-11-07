@@ -21,10 +21,9 @@
 #   - no SKILL.md mentions $ARGUMENTS outside an injection, where it would
 #     reach the model as literal text.
 #
-# $ARGUMENTS is replaced as raw unquoted text, which is how OpenCode was seen
-# to do it on 2026-09-11 (a typed path reached plan-input.sh and task-step.sh
-# whole, a sentence reached them as words). pi/expand.js keeps that rule, so
-# the skills read the same under Pi.
+# $ARGUMENTS is replaced as raw unquoted text: a typed path reaches
+# plan-input.sh and task-step.sh whole, a sentence reaches them as words.
+# pi/expand.js keeps that rule.
 #
 # Injections that call gh reach the network and are skipped (--offline).
 # Needs git and node. Exits 0 when the blocks read as they should, 1 otherwise.
@@ -86,6 +85,11 @@ for skill in "$skills"/*/SKILL.md; do
   name="$(basename "$(dirname "$skill")")"
   args="$(args_for "$name")"
 
+  # Prose names the lib as shellWord gives it, single-quoted when the checkout path
+  # needs quoting; inside "..." those quotes would become part of the path.
+  dq="$(grep -v '^!`' "$skill" | grep -c '"\$DEV_SKILLS_LIB')"
+  [ "$dq" -eq 0 ] || note "$name: \$DEV_SKILLS_LIB appears inside double quotes $dq time(s) outside an injection"
+
   # $ARGUMENTS outside an injection reaches the model as literal text.
   stray="$(grep -v '^!`' "$skill" | grep -c '\$ARGUMENTS')"
   [ "$stray" -eq 0 ] || note "$name: \$ARGUMENTS appears $stray time(s) outside an injection"
@@ -101,6 +105,9 @@ for skill in "$skills"/*/SKILL.md; do
   printf '%s\n' "$block" | grep -qi '^usage:' && note "$name: an injection printed a usage line — the model is handed the toolkit's problem: $(printf '%s\n' "$block" | grep -i -m1 '^usage:')"
   printf '%s\n' "$block" | grep -q 'command not found' && note "$name: an injection could not run: $(printf '%s\n' "$block" | grep -m1 'command not found')"
   printf '%s\n' "$block" | grep -q '\$ARGUMENTS' && note "$name: a literal \$ARGUMENTS reached the block"
+  # The model is shown this checkout's lib/ as a path. Shown the variable, it
+  # sometimes filled in a home of its own and ran whatever copy find turned up.
+  printf '%s\n' "$block" | grep -q 'DEV_SKILLS_LIB' && note "$name: the variable reached the block, where the model may fill it in itself: $(printf '%s\n' "$block" | grep -m1 'DEV_SKILLS_LIB')"
 
   if grep -q '^!`.*task-step.sh' "$skill" && [ -n "$args" ]; then
     printf '%s\n' "$block" | grep -q '^\*\*Task file:\*\* /' \
@@ -115,6 +122,9 @@ for skill in "$skills"/*/SKILL.md; do
     printf '%s\n' "$block" | grep -q '^BRANCH step/plan-1 — cut from main' \
       || note "dev-implement: the block has no BRANCH line from step-start.sh: '$(printf '%s\n' "$block" | grep -m1 'BRANCH')'"
     printf '%s\n' "$block" | grep -q '^STOP ' && note "dev-implement: a clean project got a STOP: $(printf '%s\n' "$block" | grep -m1 '^STOP ')"
+    # Quoted the way the model gets it, should this checkout's path need quoting.
+    tick="bash $(node -e 'import(process.argv[1]).then((m) => console.log(m.shellWord(process.argv[2])))' "$root/pi/lib-path.js" "$root/lib")/tick.sh"
+    printf '%s\n' "$block" | grep -qF "$tick" || note "dev-implement: the block does not name $tick"
     git -C "$proj" switch -q main
   fi
   if [ "$name" = dev-plan ]; then

@@ -312,8 +312,7 @@ want how '"python main.py"' 'python'
 want contextTokens '100000' 'python'
 
 # contextTokens is the active model's window, which pi/commands.js passes as
-# DEV_SKILLS_CONTEXT. Nothing else sets it: an OpenCode config left in a project
-# is not read, because its window was declared for a different harness.
+# DEV_SKILLS_CONTEXT. Nothing else sets it.
 ctx_case() { # ctx_case <dir> <DEV_SKILLS_CONTEXT, or empty for unset> <want> <what>
   d="$work/ctx-$1"; mkdir -p "$d"
   g "$d" init -q -b main . && g "$d" commit -qm init --allow-empty
@@ -329,9 +328,6 @@ ctx_case window 65536 65536 "the model's window is used"
 ctx_case unset '' 100000 'no window falls back'
 ctx_case bad nope 100000 'a malformed window falls back rather than propagating'
 
-d="$work/ctx-opencode"; mkdir -p "$d"
-printf '{ "model": "lmstudio/q", "provider": { "lmstudio": { "models": { "q": { "limit": { "context": 65536 } } } } } }\n' > "$d/opencode.jsonc"
-ctx_case opencode '' 100000 'an opencode.jsonc left in the project is not read'
 
 # The window belongs to the model, not the repository: a cached profile reports
 # the window DEV_SKILLS_CONTEXT names now, and its own when nothing is set.

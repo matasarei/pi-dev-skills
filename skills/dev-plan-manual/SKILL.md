@@ -35,11 +35,11 @@ Then write `<root>/.tasks/manual-<slug>.md` (root printed below; never `~`): `# 
    Walkthrough: written when you reach this step.
 ```
 
-`bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/plan-check.sh <file>` must exit 0; paste each step's `bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/step-budget.sh <file> <n>` line in. `Next: /dev-plan-manual <file> --continue`.
+`bash $DEV_SKILLS_LIB/plan-check.sh <file>` must exit 0; paste each step's `bash $DEV_SKILLS_LIB/step-budget.sh <file> <n>` line in. `Next: /dev-plan-manual <file> --continue`.
 
 ## Mode B — coach one step
 
-1. `bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/branch.sh <task-file> <n>` — refused (exit 3) means uncommitted work: commit it yourself, then run this again.
+1. `bash $DEV_SKILLS_LIB/branch.sh <task-file> <n>` — refused (exit 3) means uncommitted work: commit it yourself, then run this again.
 2. Read what the step names, then append its walkthrough under it — **max 20 lines**, indented, these labels only:
 
 ```markdown
@@ -54,8 +54,8 @@ Then write `<root>/.tasks/manual-<slug>.md` (root printed below; never `~`): `# 
 
 Never `Create:`, `Modify:` or `Test:` in a walkthrough — `steps.awk` reads those as paths — nor an unindented `<!--`, which ends the step. **No implementation**: signatures, `path:line` anchors and a pattern to follow, yes; a body you could paste, no — that is yours to write.
 
-3. Print it. Then: they write the `Red:` test first and run `bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/test.sh --red <name>` — `RED PROVEN` before any code; run the profile's test and lint, **commit this step yourself**, and tick it —
-   `bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/tick.sh <task-file> <n> "<what landed>"`.
+3. Print it. Then: they write the `Red:` test first and run `bash $DEV_SKILLS_LIB/test.sh --red <name>` — `RED PROVEN` before any code; run the profile's test and lint, **commit this step yourself**, and tick it —
+   `bash $DEV_SKILLS_LIB/tick.sh <task-file> <n> "<what landed>"`.
    Run it only when they say the step is done.
 4. Log it: a line in `## Session log` (keep 10), each new question in `## Q&A` as `- Q: … — A: … [answered|assumed] (<date>)` — what a new session reads after `/compact`.
 
@@ -74,15 +74,15 @@ Never `Create:`, `Modify:` or `Test:` in a walkthrough — `steps.awk` reads tho
 
 Root (never `~`), then the brief; its kind is on line 2:
 
-!`pwd; bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/plan-input.sh $ARGUMENTS 2>&1`
+!`pwd; bash $DEV_SKILLS_LIB/plan-input.sh $ARGUMENTS 2>&1`
 
 The step, if named:
 
-!`bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/task-step.sh $ARGUMENTS 2>&1`
+!`bash $DEV_SKILLS_LIB/task-step.sh $ARGUMENTS 2>&1`
 
 Profile:
 
-!`bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/profile.sh`
+!`bash $DEV_SKILLS_LIB/profile.sh`
 
 Learned:
 

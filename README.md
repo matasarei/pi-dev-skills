@@ -8,7 +8,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-3DA639?style=for-the-badge" alt="License: MIT" /></a>
 </p>
 
-Development skills for [Pi Coding Agent](https://pi.dev) engineered specifically for **local ~30B models** (such as **Qwen3 Coder 30B**, **Prism Bonsai 27B**, and **Qwen3.8 27B**). It continues [opencode-skills](https://github.com/matasarei/opencode-skills), which stays as the frozen OpenCode baseline.
+Development skills for [Pi Coding Agent](https://pi.dev) engineered specifically for **local ~30B models** (such as **Qwen3 Coder 30B**, **Prism Bonsai 27B**, and **Qwen3.8 27B**).
 
 Instead of relying on fragile multi-variable reasoning and prompt guesswork, these skills compute facts before prompts run, replace subjective scoring with binary yes/no checks, verify code quotes mechanically, and advance work one discrete step at a time.
 

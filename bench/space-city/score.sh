@@ -106,15 +106,6 @@ tokens="$(node -e '
         const t = JSON.parse(fs.readFileSync(`${dir}/${f}`)).tokens
         if (t) { i += t.input ?? 0; o += t.output ?? 0; found = true }
       }
-      if (harness === "opencode" && f.endsWith(".export.json")) {
-        // Sum every message that records its own tokens.
-        const walk = (v) => {
-          if (!v || typeof v !== "object") return
-          if (v.tokens && typeof v.tokens.input === "number") { i += v.tokens.input; o += v.tokens.output ?? 0; found = true; return }
-          for (const k of Object.keys(v)) walk(v[k])
-        }
-        walk(JSON.parse(fs.readFileSync(`${dir}/${f}`)))
-      }
     } catch {}
   }
   console.log(found ? `${i}/${o}` : "?")

@@ -3,12 +3,14 @@
 // The skill is not handed to Pi as a skill: Pi would list it in the system
 // prompt and leave its "!`…`" lines unrun. Instead the command runs them here
 // (pi/expand.js) and sends the result as the user's message, so the model gets
-// the facts already computed, the same block OpenCode used to assemble.
+// the facts already computed.
 //
 // The scripts the injections and the model call live in this checkout's lib/.
 // DEV_SKILLS_LIB points there, and DEV_SKILLS_CONTEXT carries the active
 // model's window, which profile.sh and step-budget.sh size steps against.
 // Both are also set on process.env, which the model's own bash calls inherit.
+// The model itself is shown lib/ as an absolute path, never the variable
+// (pi/lib-path.js).
 //
 // During a command it also stops a reply that repeats itself (pi/runaway.js), which
 // would otherwise run to the output limit and end the session. Pi leaves the stopped
@@ -32,11 +34,11 @@ import { isCutOff, withRetrySettings, withSmallerAsk } from "./cut-off.js"
 import { description, expandSkill } from "./expand.js"
 import { failedTestRun, OFFER, OFFER_AT } from "./failing-runs.js"
 import { idleProblem, isLocalUrl } from "./idle-timeout.js"
+import { LIB as lib } from "./lib-path.js"
 import { createWatch, NUDGE, STOP_AT } from "./runaway.js"
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const skills = join(root, "skills")
-const lib = join(root, "lib")
 
 // The skill directories, in name order.
 export function skillNames(dir = skills) {
@@ -157,8 +159,14 @@ const learnedOnly = (toolName, input) => {
 }
 
 // Whether a command line runs lib/test-open.sh, as opposed to reading it or running its suite.
+// The script is the first word after bash or sh, read with its quotes, so a path quoted
+// for a space ('/my dir/lib'/test-open.sh, from pi/lib-path.js) is still that script.
+const SCRIPT_WORD = /^(?:(?:bash|sh)\s+)?((?:'[^']*'|"[^"]*"|[^\s"'])+)/
 const runsTestOpen = (command) =>
-  simpleCommands(command).some((p) => /^(?:(?:bash|sh)\s+)?["']?[^\s"']*test-open\.sh["']?(\s|$)/.test(p) && !p.includes("evals/"))
+  simpleCommands(command).some((p) => {
+    const word = SCRIPT_WORD.exec(p)?.[1].replace(/["']/g, "")
+    return word !== undefined && word.endsWith("test-open.sh") && !word.includes("evals/")
+  })
 
 // Whether a call changes the list of open tests, as opposed to reading it. Written by
 // hand, it would skip both the wait and the check that the step added the test.

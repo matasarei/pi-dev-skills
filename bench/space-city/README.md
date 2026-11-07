@@ -2,7 +2,7 @@
 
 One fixed task, built by `/dev-implement` one step per session, scored by tests the model never
 sees. Everything a result depends on is pinned, so a run today and a run in six months measure
-the same thing, and a difference between two rows is the harness, not the task.
+the same thing, and a difference between two rows is the skills at that commit, not the task.
 
 ## What is pinned
 
@@ -14,10 +14,9 @@ the same thing, and a difference between two rows is the harness, not the task.
 | Model | `lmstudio/prism-ml/bonsai-27b`, loaded at a 131072 window | `lms ps` |
 | Pi side | Pi 1.5.0 with this checkout; the commit is recorded per row | `pi --version`, `pi list` |
 | Idle timeout | Pi's `httpIdleTimeoutMs` at 20 minutes or more, in `~/.pi/agent/settings.json`; `meta.env` records it as `http_idle_ms` | [`idle-check.mjs`](idle-check.mjs) |
-| OpenCode side | OpenCode 1.18.20 with opencode-skills at `9365f31`, the commit this repository was copied from | the installed files compared with that commit |
 
 Not pinned, so recorded instead: the `node:lts-alpine` image the profile runs tests in (its
-digest goes in `runs/<run>/meta.env`), LM Studio's own version, and on Pi the model's `maxTokens`
+digest goes in `runs/<run>/meta.env`), LM Studio's own version, and the model's `maxTokens`
 in `~/.pi/agent/models.json` (`max_tokens` in `meta.env`). A runaway tool call runs to that limit,
 so it changes what a row costs. Rows up to `pi@289fbc9` in `results.md` ran at 16384.
 
@@ -31,7 +30,6 @@ passes none of the hidden ones. Both were checked when the benchmark was written
 ~/.lmstudio/bin/lms load prism-ml/bonsai-27b --context-length 131072 -y
 
 bash bench/space-city/run.sh pi
-bash bench/space-city/run.sh opencode     # stops with the reinstall command if the copy is stale
 
 ~/.lmstudio/bin/lms unload --all && ~/.lmstudio/bin/lms server stop
 ```
@@ -45,9 +43,8 @@ Re-score a finished run with `BENCH_RESULTS=/dev/null bash bench/space-city/scor
 The run is headless: a skill that stops to ask ends its session, and the step counts as not done.
 A start the harness gates itself (a refused branch: `step-start.sh`'s `STOP`) never reaches the
 model; `meta.env` records that step's exit as 3.
-That holds for both harnesses alike.
 
-On Pi, a step that ends unticked gets one more session with `--continue`, the README's recovery
+A step that ends unticked gets one more session with `--continue`, the README's recovery
 for a stuck run, with its own timeout and its log in `step-<n>-retry1.jsonl`. It doesn't get one
 when the start was gated, when Pi itself failed, or when an earlier step is the unticked one.
 `meta.env` records `step<n>_resumes`, and `step<n>_seconds` covers every attempt, so a run can
@@ -108,15 +105,4 @@ the original tree:
 - **tsc** — `npx tsc --noEmit`.
 - **Outside the plan** — files changed that no step's `Create:` or `Modify:` names.
 - **Commits / step branches**, **guard refusals**, **`TEST PASS` lines** — from git and the session logs.
-- **Seconds**, **tokens in/out** — wall time of all steps, and the harness's own token count.
-
-The OpenCode token count is read from `opencode export` by summing every message's `tokens`. That
-shape was not seen on a real run when this was written; a `?` means it did not match.
-
-## Known differences between the two sides
-
-- OpenCode also loads the skills under `~/.claude/skills` into its catalog, so its system prompt
-  carries more than the nine dev skills. Pi's does not. That cost is OpenCode's, and the token
-  column includes it.
-- The skills' text is the same on both sides. Only the harness differs: how a skill reaches the
-  model, the guard, and where the window comes from.
+- **Seconds**, **tokens in/out** — wall time of all steps, and Pi's own token count.

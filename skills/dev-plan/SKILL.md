@@ -50,8 +50,8 @@ Save to `<root>/.tasks/<slug>.md` (root printed below; never `~`), sections: `# 
 ## Step 5 — Check the plan, then hand off
 
 ```
-bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/plan-check.sh .tasks/<slug>.md
-bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/step-budget.sh .tasks/<slug>.md <n>   # every step
+bash $DEV_SKILLS_LIB/plan-check.sh .tasks/<slug>.md
+bash $DEV_SKILLS_LIB/step-budget.sh .tasks/<slug>.md <n>   # every step
 ```
 
 `plan-check.sh` must exit 0; fix any missing steps, bad paths or `Red:` lines. Paste each step's `Budget:` line in. OVER → split when a split exists; otherwise keep it and write `OVER — kept: <reason>` — the cap is a recommendation.
@@ -62,7 +62,7 @@ In chat: absolute path, plan-check's last line and summary verbatim, what was `[
 
 - No production code; production is read-only, by a human. With `hasDatabase`: dry-run by default, safe re-runs, bounded scope.
 - Ask in the chat, not in the plan. Absolute paths, under the root. English.
-- Run the dev-lib scripts; never `cat` them — their output is the fact.
+- Run the lib scripts; never `cat` them — their output is the fact.
 
 ---
 
@@ -74,11 +74,11 @@ Root — the plan goes under it, never `~`:
 
 Brief:
 
-!`bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/plan-input.sh $ARGUMENTS 2>&1`
+!`bash $DEV_SKILLS_LIB/plan-input.sh $ARGUMENTS 2>&1`
 
 Profile:
 
-!`bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/profile.sh`
+!`bash $DEV_SKILLS_LIB/profile.sh`
 
 Learned notes:
 
