@@ -60,7 +60,7 @@ let script = []
 let served = 0
 let bodies = []
 const chunk = (delta, finish = null) => `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 1, model: "m", choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`
-const calls = { broken: ["edit", { path: "notes.txt", edits: '[{"oldText": "hello", "newText": "bye' }], repeated: ["edit", { path: "notes.txt", edits: '[{"oldText": "hello", "newText": "bye", "newText": ""}]' }], closers: ["edit", { path: "notes.txt", edits: '[{"oldText": "hello", "newText": "bye"}]}]' }], flat: ["edit", { path: "notes.txt", oldText: "hello", newText: "bye" }], read: ["read", { path: "notes.txt" }], write: ["write", { path: "written.txt", content: "let x = 3;\n" }] }
+const calls = { broken: ["edit", { path: "notes.txt", edits: '[{"oldText": "hello", "newText": "bye' }], repeated: ["edit", { path: "notes.txt", edits: '[{"oldText": "hello", "newText": "bye", "newText": ""}]' }], closers: ["edit", { path: "notes.txt", edits: '[{"oldText": "hello", "newText": "bye"}]}]' }], flat: ["edit", { path: "notes.txt", oldText: "hello", newText: "bye" }], pathOnly: ["edit", { path: "notes.txt" }], read: ["read", { path: "notes.txt" }], write: ["write", { path: "written.txt", content: "let x = 3;\n" }] }
 // A tool call's name now and its arguments after a silence, or never: the output limit ends it.
 const SILENCE_MS = 3000
 // One line, over and over, until the client goes or the output limit would end it.
@@ -183,6 +183,11 @@ expect("the flat edit did not write its text", readFileSync(`${proj}/notes.txt`,
 // The model is sent that shape in the schema too: oldText and newText after path, only path required.
 const sentEdit = bodies[0]?.tools?.find((t) => t.function?.name === "edit")?.function
 expect("the edit schema sent has no flat shape", JSON.stringify(Object.keys(sentEdit?.parameters?.properties ?? {})) === '["path","oldText","newText","edits"]' && JSON.stringify(sentEdit.parameters.required) === '["path"]' && sentEdit.description.startsWith("For one replacement, pass oldText and newText directly"), sentEdit)
+// With only path required, an edit with nothing to change passes validation: Pi's own tool refuses it, clearly.
+writeFileSync(`${proj}/notes.txt`, original)
+;[r] = await session(["pathOnly", "text"])
+expect("an edit with only a path was not refused clearly", r.tools.length === 1 && r.tools[0].isError && r.tools[0].text.includes("edits must contain at least one replacement"), r.tools)
+expect("an edit with only a path changed the file", readFileSync(`${proj}/notes.txt`, "utf8") === original, "changed")
 writeFileSync(`${proj}/notes.txt`, original)
 
 // Three failures and then an answer: nothing stops.
