@@ -2,14 +2,13 @@
 //
 // Every SKILL.md here computes its facts with lines of the form
 //
-//   !`bash ${DEV_SKILLS_LIB:-…}/task-step.sh $ARGUMENTS 2>&1`
+//   !`bash $DEV_SKILLS_LIB/task-step.sh $ARGUMENTS 2>&1`
 //
-// OpenCode ran those itself. Pi skills follow the Agent Skills spec, which only
-// appends arguments, so pi/commands.js runs them here instead: each injection
-// line is replaced by what its command printed, $ARGUMENTS by the raw argument
-// text, and the frontmatter is dropped. The rule is the one
-// evals/skills/injected.sh used to simulate OpenCode with, and that suite now
-// runs this file, so the code that is tested is the code that runs.
+// Pi skills follow the Agent Skills spec, which only appends arguments, so
+// pi/commands.js runs those lines here instead: each injection line is replaced
+// by what its command printed, $ARGUMENTS by the raw argument text, and the
+// frontmatter is dropped. evals/skills/injected.sh runs this file, so the code
+// that is tested is the code that runs.
 //
 // Run it by hand to see what the model would get:
 //

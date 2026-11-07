@@ -21,10 +21,9 @@
 #   - no SKILL.md mentions $ARGUMENTS outside an injection, where it would
 #     reach the model as literal text.
 #
-# $ARGUMENTS is replaced as raw unquoted text, which is how OpenCode was seen
-# to do it on 2026-09-11 (a typed path reached plan-input.sh and task-step.sh
-# whole, a sentence reached them as words). pi/expand.js keeps that rule, so
-# the skills read the same under Pi.
+# $ARGUMENTS is replaced as raw unquoted text: a typed path reaches
+# plan-input.sh and task-step.sh whole, a sentence reaches them as words.
+# pi/expand.js keeps that rule.
 #
 # Injections that call gh reach the network and are skipped (--offline).
 # Needs git and node. Exits 0 when the blocks read as they should, 1 otherwise.
@@ -104,7 +103,8 @@ for skill in "$skills"/*/SKILL.md; do
   # The model is shown this checkout's lib/ as a path. Shown the variable, it
   # sometimes filled in a home of its own and ran whatever copy find turned up.
   printf '%s\n' "$block" | grep -q 'DEV_SKILLS_LIB' && note "$name: the variable reached the block, where the model may fill it in itself: $(printf '%s\n' "$block" | grep -m1 'DEV_SKILLS_LIB')"
-  printf '%s\n' "$block" | grep -qi 'opencode' && note "$name: the block names OpenCode: $(printf '%s\n' "$block" | grep -i -m1 'opencode')"
+  # The harness this repository was ported from, split so this line doesn't match itself.
+  printf '%s\n' "$block" | grep -qi 'open''code' && note "$name: the block names the old harness: $(printf '%s\n' "$block" | grep -i -m1 'open''code')"
 
   if grep -q '^!`.*task-step.sh' "$skill" && [ -n "$args" ]; then
     printf '%s\n' "$block" | grep -q '^\*\*Task file:\*\* /' \

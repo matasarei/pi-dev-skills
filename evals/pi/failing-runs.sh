@@ -72,7 +72,7 @@ for (const command of ["cat lib/test-open.sh", "shellcheck lib/test-open.sh", "b
     if (gate(state, { toolName: "bash", input: { command } }, process.cwd())?.block) fails.push(`${command} was refused ${what}`)
   }
 }
-for (const command of ["bash lib/test-open.sh", "sh ./lib/test-open.sh", "lib/test-open.sh", "cd x && bash lib/test-open.sh", 'bash "${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/test-open.sh"', "bash $DEV_SKILLS_LIB/test-open.sh 2>&1 | tail -5"]) {
+for (const command of ["bash lib/test-open.sh", "sh ./lib/test-open.sh", "lib/test-open.sh", "cd x && bash lib/test-open.sh", "bash $DEV_SKILLS_LIB/test-open.sh 2>&1 | tail -5"]) {
   if (!gate(step(0), { toolName: "bash", input: { command } }, process.cwd())?.block) fails.push(`${command} was not refused`)
 }
 

@@ -103,11 +103,8 @@ MODEL=bonsai-27b run
 want model 'bonsai-27b' 'model from MODEL outside Pi'
 PI_MODEL=qwen/qwen3-coder-30b MODEL=bonsai-27b run
 want model 'qwen/qwen3-coder-30b' 'PI_MODEL wins over MODEL'
-# An OpenCode config left in the project is not read any more
-printf '{\n  "model": "qwen3-coder-30b"\n}\n' > "$repo/opencode.jsonc"
 run
-want model 'unknown' 'an opencode.jsonc left in the project is not read'
-rm -f "$repo/opencode.jsonc"
+want model 'unknown' 'no PI_MODEL or MODEL'
 
 # Step 2, cut from step 1, unpushed, with one planned and one unplanned change.
 g switch -qc step/x-2

@@ -3,7 +3,7 @@
 // The skill is not handed to Pi as a skill: Pi would list it in the system
 // prompt and leave its "!`…`" lines unrun. Instead the command runs them here
 // (pi/expand.js) and sends the result as the user's message, so the model gets
-// the facts already computed, the same block OpenCode used to assemble.
+// the facts already computed.
 //
 // The scripts the injections and the model call live in this checkout's lib/.
 // DEV_SKILLS_LIB points there, and DEV_SKILLS_CONTEXT carries the active

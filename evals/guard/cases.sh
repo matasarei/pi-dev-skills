@@ -130,7 +130,6 @@ cat > "$work/container-cases.txt" <<'TABLE'
 0|docker run --rm -v "${PWD}":/app -w /app node:lts-alpine npx vitest run src/x.test.ts
 0|cd . && docker run --rm -v "$PWD":/app -w /app node:lts-alpine npm ci
 0|bash $DEV_SKILLS_LIB/test.sh --scoped costs.test
-0|bash ${DEV_SKILLS_LIB:-$HOME/.config/opencode/dev-lib}/test.sh
 0|git status
 0|grep -rn "npm ci" src/
 0|cat package.json

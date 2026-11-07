@@ -32,8 +32,7 @@
 // uses on purpose. package.json lists this file under pi.extensions, so it is
 // on for every session.
 //
-// Ported from this repository's OpenCode plugin (lib/dev-guard.js), itself from
-// claude-skills' scripts/guard.sh — MIT, same author. The rules are unchanged;
+// Ported from claude-skills' scripts/guard.sh — MIT, same author. The rules are unchanged;
 // the argument names are Pi's: bash {command, timeout seconds}, read {path},
 // edit {path, edits: [{oldText, newText}]}, write {path, content},
 // grep {pattern, literal}, find {path}.
