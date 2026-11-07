@@ -1,21 +1,20 @@
 #!/usr/bin/env bash
-# One benchmark run: the space-city funds plan, built step by step by one
-# harness, headless, then scored.
+# One benchmark run: the space-city funds plan, built step by step by Pi with
+# these skills, headless, then scored.
 #
 #   bash bench/space-city/run.sh pi
-#   bash bench/space-city/run.sh opencode
 #   bash bench/space-city/run.sh pi --steps 1      # only step 1 (or 1-2, 2-3)
 #
 # Everything a result depends on is pinned below and checked before anything
-# runs: the target commit, the harness versions, the model and its window, and on
-# Pi an idle timeout that clears the longest reply (idle-check.mjs).
+# runs: the target commit, Pi's version, the model and its window, and an idle
+# timeout that clears the longest reply (idle-check.mjs).
 # A mismatch stops the run instead of recording a result against the wrong
 # thing. The target is a fresh clone with its remote removed, so nothing the
 # model does can reach GitHub. Each step is /dev-implement <plan> --step N in
-# a new session, as the README's /new rule says. On Pi, a step left unticked gets
-# one more session with --continue (run-step.sh; BENCH_RESUMES sets how many).
+# a new session, as the README's /new rule says. A step left unticked gets one
+# more session with --continue (run-step.sh; BENCH_RESUMES sets how many).
 #
-# Logs go to bench/space-city/runs/<stamp>-<harness>/ (git-ignored); the
+# Logs go to bench/space-city/runs/<stamp>-pi/ (git-ignored); the
 # scored row is printed and appended to bench/space-city/results.md.
 
 set -u
@@ -23,22 +22,21 @@ set -u
 # --- the pins ---------------------------------------------------------------
 SPACE_CITY_URL="https://github.com/matasarei/space-city.git"
 SPACE_CITY_SHA="ec643a375175d7d734e262309072a3ff0adbd650"
-OPENCODE_SKILLS_SHA="9365f31bc611037dfd1c8bdfc25bb254ac10be7a"
-OPENCODE_VERSION="1.18.20"
 PI_VERSION="1.5.0"
 LMS_MODEL="prism-ml/bonsai-27b"
 MODEL="lmstudio/$LMS_MODEL"
 CONTEXT=131072
-STEP_TIMEOUT="${BENCH_STEP_TIMEOUT:-1800}"
 IMAGE="node:lts-alpine"
+STEP_TIMEOUT="${BENCH_STEP_TIMEOUT:-1800}"
 # -----------------------------------------------------------------------------
 
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
 die() { printf 'bench: %s\n' "$1" >&2; exit 1; }
 
+# "pi" names the harness in the logs and the results row (pi@<commit>).
 harness="${1:-}"
-case "$harness" in pi|opencode) ;; *) die "usage: run.sh <pi|opencode> [--steps 1-3]" ;; esac
+[ "$harness" = pi ] || die "usage: run.sh pi [--steps 1-3]"
 first=1 last=3
 if [ "${2:-}" = "--steps" ]; then
   case "${3:-}" in
@@ -65,39 +63,19 @@ else
   printf 'bench: no lms CLI, so the loaded window is not checked — make sure it is %s\n' "$CONTEXT" >&2
 fi
 
-if [ "$harness" = pi ]; then
-  command -v pi >/dev/null 2>&1 || die "pi is not installed"
-  [ "$(pi --version 2>/dev/null)" = "$PI_VERSION" ] || die "pi is $(pi --version 2>/dev/null), the pin is $PI_VERSION"
-  pi list 2>/dev/null | grep -q "pi-dev-skills" || die "pi-dev-skills is not installed in Pi (pi install $root)"
-  http_idle_ms="$(node "$here/idle-check.mjs")" || die "Pi's idle timeout would drop long tool calls, so the run would not measure the skills"
-  # Recorded, not pinned: a runaway tool call costs less at a lower limit, so a row depends on it.
-  max_tokens="$(node -e '
-    const { join } = require("node:path")
-    const dir = process.env.PI_CODING_AGENT_DIR || join(require("node:os").homedir(), ".pi", "agent")
-    const { providers } = JSON.parse(require("node:fs").readFileSync(join(dir, "models.json"), "utf8"))
-    console.log(Object.values(providers).flatMap((p) => p.models ?? []).find((m) => m.id === process.argv[1]).maxTokens ?? "unknown")
-  ' "$LMS_MODEL" 2>/dev/null)" || max_tokens=unknown
-  harness_rev="$(git -C "$root" rev-parse --short HEAD)"
-  git -C "$root" diff --quiet HEAD -- pi lib skills || harness_rev="$harness_rev+dirty"
-else
-  command -v opencode >/dev/null 2>&1 || die "opencode is not installed"
-  [ "$(opencode --version 2>/dev/null)" = "$OPENCODE_VERSION" ] || die "opencode is $(opencode --version 2>/dev/null), the pin is $OPENCODE_VERSION"
-  oc="${OPENCODE_SKILLS_DIR:-$root/../opencode-skills}"
-  git -C "$oc" cat-file -e "$OPENCODE_SKILLS_SHA" 2>/dev/null || die "no opencode-skills checkout with $OPENCODE_SKILLS_SHA at $oc (set OPENCODE_SKILLS_DIR)"
-  # The installed copy is what OpenCode runs; it has to be the pinned commit's.
-  stale=""
-  for f in $(git -C "$oc" ls-tree -r --name-only "$OPENCODE_SKILLS_SHA" -- skills lib); do
-    case "$f" in
-      skills/*/SKILL.md) dest="$HOME/.config/opencode/$f" ;;
-      lib/dev-guard.js) dest="$HOME/.config/opencode/plugins/dev-guard.js" ;;
-      lib/*) dest="$HOME/.config/opencode/dev-lib/${f#lib/}" ;;
-      *) continue ;;
-    esac
-    git -C "$oc" show "$OPENCODE_SKILLS_SHA:$f" | cmp -s - "$dest" || stale="$stale ${f}"
-  done
-  [ -z "$stale" ] || die "the installed opencode-skills is not $OPENCODE_SKILLS_SHA (differs:$stale). Reinstall: git -C $oc worktree add /tmp/oc-pin $OPENCODE_SKILLS_SHA && (cd /tmp/oc-pin && ./install.sh)"
-  harness_rev="${OPENCODE_SKILLS_SHA:0:7}"
-fi
+command -v pi >/dev/null 2>&1 || die "pi is not installed"
+[ "$(pi --version 2>/dev/null)" = "$PI_VERSION" ] || die "pi is $(pi --version 2>/dev/null), the pin is $PI_VERSION"
+pi list 2>/dev/null | grep -q "pi-dev-skills" || die "pi-dev-skills is not installed in Pi (pi install $root)"
+http_idle_ms="$(node "$here/idle-check.mjs")" || die "Pi's idle timeout would drop long tool calls, so the run would not measure the skills"
+# Recorded, not pinned: a runaway tool call costs less at a lower limit, so a row depends on it.
+max_tokens="$(node -e '
+  const { join } = require("node:path")
+  const dir = process.env.PI_CODING_AGENT_DIR || join(require("node:os").homedir(), ".pi", "agent")
+  const { providers } = JSON.parse(require("node:fs").readFileSync(join(dir, "models.json"), "utf8"))
+  console.log(Object.values(providers).flatMap((p) => p.models ?? []).find((m) => m.id === process.argv[1]).maxTokens ?? "unknown")
+' "$LMS_MODEL" 2>/dev/null)" || max_tokens=unknown
+harness_rev="$(git -C "$root" rev-parse --short HEAD)"
+git -C "$root" diff --quiet HEAD -- pi lib skills || harness_rev="$harness_rev+dirty"
 
 # --- a fresh target at the pinned commit -------------------------------------
 stamp="$(date +%Y%m%d-%H%M%S)"
@@ -120,24 +98,13 @@ cp "$here/plan.md" "$proj/.tasks/funds.md"
 {
   printf 'harness=%s\nharness_rev=%s\nmodel=%s\ncontext=%s\nsteps=%s-%s\n' "$harness" "$harness_rev" "$MODEL" "$CONTEXT" "$first" "$last"
   printf 'target=%s\nimage=%s\n' "$SPACE_CITY_SHA" "$(docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE" 2>/dev/null)"
-  if [ "$harness" = pi ]; then printf 'http_idle_ms=%s\nmax_tokens=%s\n' "$http_idle_ms" "$max_tokens"; fi
+  printf 'http_idle_ms=%s\nmax_tokens=%s\n' "$http_idle_ms" "$max_tokens"
 } > "$logs/meta.env"
 
-# --- the steps: one session each, and on Pi one more for a step left unticked -
+# --- the steps: one session each, and one more for a step left unticked ------
 for n in $(seq "$first" "$last"); do
   printf 'bench: step %s ...\n' "$n"
-  if [ "$harness" = pi ]; then
-    bash "$here/run-step.sh" "$proj" .tasks/funds.md "$n" "$MODEL" "$logs" "$STEP_TIMEOUT"
-    continue
-  fi
-  t0="$(date +%s)"
-  (cd "$proj" && perl -e 'alarm shift; exec @ARGV' "$STEP_TIMEOUT" \
-    opencode run --command dev-implement --format json -m "$MODEL" ".tasks/funds.md --step $n") \
-    >"$logs/step-$n.jsonl" 2>"$logs/step-$n.stderr"
-  rc=$?
-  sid="$(grep -o '"sessionID":"[^"]*"' "$logs/step-$n.jsonl" | head -1 | cut -d'"' -f4)"
-  [ -n "$sid" ] && opencode export "$sid" >"$logs/step-$n.export.json" 2>/dev/null
-  printf 'step%s_seconds=%s\nstep%s_exit=%s\n' "$n" "$(( $(date +%s) - t0 ))" "$n" "$rc" >> "$logs/meta.env"
+  bash "$here/run-step.sh" "$proj" .tasks/funds.md "$n" "$MODEL" "$logs" "$STEP_TIMEOUT"
 done
 
 bash "$here/score.sh" "$proj" "$logs"
