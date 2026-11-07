@@ -108,8 +108,6 @@ for skill in "$skills"/*/SKILL.md; do
   # The model is shown this checkout's lib/ as a path. Shown the variable, it
   # sometimes filled in a home of its own and ran whatever copy find turned up.
   printf '%s\n' "$block" | grep -q 'DEV_SKILLS_LIB' && note "$name: the variable reached the block, where the model may fill it in itself: $(printf '%s\n' "$block" | grep -m1 'DEV_SKILLS_LIB')"
-  # The harness this repository was ported from, split so this line doesn't match itself.
-  printf '%s\n' "$block" | grep -qi 'open''code' && note "$name: the block names the old harness: $(printf '%s\n' "$block" | grep -i -m1 'open''code')"
 
   if grep -q '^!`.*task-step.sh' "$skill" && [ -n "$args" ]; then
     printf '%s\n' "$block" | grep -q '^\*\*Task file:\*\* /' \
