@@ -72,7 +72,9 @@ for (const command of ["cat lib/test-open.sh", "shellcheck lib/test-open.sh", "b
     if (gate(state, { toolName: "bash", input: { command } }, process.cwd())?.block) fails.push(`${command} was refused ${what}`)
   }
 }
-for (const command of ["bash lib/test-open.sh", "sh ./lib/test-open.sh", "lib/test-open.sh", "cd x && bash lib/test-open.sh", "bash $DEV_SKILLS_LIB/test-open.sh 2>&1 | tail -5"]) {
+for (const command of ["bash lib/test-open.sh", "sh ./lib/test-open.sh", "lib/test-open.sh", "cd x && bash lib/test-open.sh", "bash $DEV_SKILLS_LIB/test-open.sh 2>&1 | tail -5", `bash ${root}/lib/test-open.sh`,
+  // The path as shellWord gives it for a checkout path with a space, and quoted whole.
+  "bash '/my dir/lib'/test-open.sh", 'bash "/my dir/lib/test-open.sh"', 'bash "$DEV_SKILLS_LIB/test-open.sh"']) {
   if (!gate(step(0), { toolName: "bash", input: { command } }, process.cwd())?.block) fails.push(`${command} was not refused`)
 }
 

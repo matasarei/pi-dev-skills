@@ -159,8 +159,14 @@ const learnedOnly = (toolName, input) => {
 }
 
 // Whether a command line runs lib/test-open.sh, as opposed to reading it or running its suite.
+// The script is the first word after bash or sh, read with its quotes, so a path quoted
+// for a space ('/my dir/lib'/test-open.sh, from pi/lib-path.js) is still that script.
+const SCRIPT_WORD = /^(?:(?:bash|sh)\s+)?((?:'[^']*'|"[^"]*"|[^\s"'])+)/
 const runsTestOpen = (command) =>
-  simpleCommands(command).some((p) => /^(?:(?:bash|sh)\s+)?["']?[^\s"']*test-open\.sh["']?(\s|$)/.test(p) && !p.includes("evals/"))
+  simpleCommands(command).some((p) => {
+    const word = SCRIPT_WORD.exec(p)?.[1].replace(/["']/g, "")
+    return word !== undefined && word.endsWith("test-open.sh") && !word.includes("evals/")
+  })
 
 // Whether a call changes the list of open tests, as opposed to reading it. Written by
 // hand, it would skip both the wait and the check that the step added the test.
