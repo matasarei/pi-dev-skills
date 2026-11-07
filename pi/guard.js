@@ -40,6 +40,7 @@
 
 import { existsSync, statSync, readFileSync } from "node:fs"
 import { join, dirname, resolve } from "node:path"
+import { LIB, shellWord } from "./lib-path.js"
 
 const SEG = "[^|;&]*" // the rest of one command in a pipeline or chain
 const REFUSES = "dev-guard refuses: "
@@ -104,7 +105,7 @@ export function reasonToRefuse(command, bases, onBranch) {
   }
   if (onBranch && bases.includes(onBranch) && has(`git${SEG}commit(\\s|$)`)) {
     return `a commit on the base branch '${onBranch}'. Cut the step branch first — ` +
-      "bash $DEV_SKILLS_LIB/branch.sh <task-file> <n> — and commit there."
+      `bash ${shellWord(LIB)}/branch.sh <task-file> <n> — and commit there.`
   }
   if (has(`gh${SEG}pr${SEG}\\smerge(\\s|$)`)) {
     return "merging is where this stops. Open or update the pull request; a person merges it."
@@ -223,7 +224,7 @@ export function reasonToRefuseRun(command, profile) {
     if (INSTALLS.test(seg)) {
       return `${where} Install with the profile's command${install ? `: ${install}` : `, through ${prefix}`}.`
     }
-    return `${where} Run the tests with bash $DEV_SKILLS_LIB/test.sh (--scoped <name> for one file), or run the command after the profile's prefix: ${prefix} <command>`
+    return `${where} Run the tests with bash ${shellWord(LIB)}/test.sh (--scoped <name> for one file), or run the command after the profile's prefix: ${prefix} <command>`
   }
   return null
 }

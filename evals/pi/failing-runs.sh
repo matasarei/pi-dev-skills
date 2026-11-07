@@ -52,6 +52,8 @@ if (failedTestRun(undefined) || failedTestRun("")) fails.push("no text was count
 
 if (OFFER_AT !== 5) fails.push(`the offer comes after ${OFFER_AT}, and the README says 5`)
 if (!OFFER.includes("test-open.sh") || !OFFER.includes("/dev-pr") || !OFFER.includes(`${OFFER_AT}`)) fails.push(`the offer doesn't say what it is: ${OFFER}`)
+// The script by its path: shown the variable, the model may fill in a home of its own.
+if (!OFFER.includes(`bash ${root}/lib/test-open.sh`) || OFFER.includes("DEV_SKILLS_LIB")) fails.push(`the offer doesn't name ${root}/lib/test-open.sh: ${OFFER}`)
 
 // Refused before the offer, and outside a step. Anything else in a step isn't touched by this.
 const open = { toolName: "bash", input: { command: 'bash "$DEV_SKILLS_LIB/test-open.sh"' } }

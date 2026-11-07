@@ -111,7 +111,7 @@ TABLE
 # how the bench's first run broke node_modules. Refused, with the command to use;
 # the same commands through the container, or through test.sh, are allowed.
 cat > "$work/container-cases.txt" <<'TABLE'
-2:test.sh|npx vitest run src/__tests__/costs.test.ts
+2:@LIB@/test.sh|npx vitest run src/__tests__/costs.test.ts
 2:test.sh|cd /some/where && npx vitest run src/a.test.ts 2>&1 | tail -80
 2:npm ci|npm ci
 2:npm ci|cd . && npm install
@@ -176,8 +176,12 @@ printf '{ "baseBranch": "release" }\n' > "$work/withprofile/.devskills/profile.j
 
 cat > "$work/run.mjs" <<'JS'
 import { readFileSync, writeFileSync } from "node:fs"
+import { dirname, join } from "node:path"
 import { pathToFileURL } from "node:url"
 const [pluginPath, casesPath, dir, label] = process.argv.slice(2)
+// "@LIB@" in a case's text is this checkout's lib/: a reason names the script by
+// its path, never by $DEV_SKILLS_LIB, which the model may fill in itself.
+const lib = join(dirname(dirname(pluginPath)), "lib")
 const mod = await import(pathToFileURL(pluginPath).href)
 let fails = 0
 const fail = (what) => { fails++; console.log(`FAIL  ${label} ${what}`) }
@@ -204,10 +208,12 @@ for (const line of readFileSync(casesPath, "utf8").split("\n")) {
   if (!line || line.startsWith("#")) continue
   const i = line.indexOf("|")
   // "2:text" is a refusal whose reason has to contain text: the command to use.
-  const [want, mustSay] = line.slice(0, i).split(":"), cmd = line.slice(i + 1)
+  const [want, said] = line.slice(0, i).split(":"), cmd = line.slice(i + 1)
+  const mustSay = said?.replaceAll("@LIB@", lib)
   const [got, reason] = await verdict("bash", { command: cmd })
   if (got !== want) fail(`want=${want} got=${got}  ${cmd}${reason ? "  (" + reason + ")" : ""}`)
   else if (mustSay && !reason.includes(mustSay)) fail(`the reason does not say '${mustSay}': ${cmd}  (${reason})`)
+  if (reason.includes("DEV_SKILLS_LIB")) fail(`the reason names $DEV_SKILLS_LIB, not the path: ${cmd}  (${reason})`)
 }
 // Another tool's arguments are never read: an edit whose text mentions a push is not a push.
 if ((await verdict("edit", { command: "git push --force" }))[0] !== "0") fail("a non-bash tool was refused")
@@ -527,7 +533,7 @@ JS
 # branch.sh once committed a step straight onto master — and allowed on a step
 # branch, or where there is no repository at all (the two tables above).
 cat > "$work/onbase-cases.txt" <<'TABLE'
-2|git commit -m "x"
+2:@LIB@/branch.sh|git commit -m "x"
 2|cd sub && git commit -m "x"
 2|git add . && git commit -m "step 1"
 0|git status
