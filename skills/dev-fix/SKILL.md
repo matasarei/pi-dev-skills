@@ -53,7 +53,7 @@ Root — the plan goes under it, never `~`:
 
 Profile:
 
-!`bash $DEV_SKILLS_LIB/profile.sh`
+!`bash "$DEV_SKILLS_LIB/profile.sh"`
 
 Branch and working tree:
 
@@ -61,8 +61,8 @@ Branch and working tree:
 
 Input / brief:
 
-!`bash $DEV_SKILLS_LIB/plan-input.sh $ARGUMENTS 2>&1`
+!`bash "$DEV_SKILLS_LIB/plan-input.sh" $ARGUMENTS 2>&1`
 
 Findings, verified (when continuing after review):
 
-!`bash $DEV_SKILLS_LIB/findings-check.sh $ARGUMENTS 2>&1`
+!`bash "$DEV_SKILLS_LIB/findings-check.sh" $ARGUMENTS 2>&1`

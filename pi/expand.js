@@ -2,7 +2,7 @@
 //
 // Every SKILL.md here computes its facts with lines of the form
 //
-//   !`bash $DEV_SKILLS_LIB/task-step.sh $ARGUMENTS 2>&1`
+//   !`bash "$DEV_SKILLS_LIB/task-step.sh" $ARGUMENTS 2>&1`
 //
 // Pi skills follow the Agent Skills spec, which only appends arguments, so
 // pi/commands.js runs those lines here instead: each injection line is replaced

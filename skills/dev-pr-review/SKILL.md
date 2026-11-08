@@ -70,8 +70,8 @@ Then ask once: `Worktree left at <path>. Remove it?` — **never remove it witho
 
 Comments already on it:
 
-!`bash $DEV_SKILLS_LIB/pr-comments.sh $ARGUMENTS 2>&1`
+!`bash "$DEV_SKILLS_LIB/pr-comments.sh" $ARGUMENTS 2>&1`
 
 Profile:
 
-!`bash $DEV_SKILLS_LIB/profile.sh`
+!`bash "$DEV_SKILLS_LIB/profile.sh"`

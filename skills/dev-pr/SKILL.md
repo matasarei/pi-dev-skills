@@ -63,8 +63,8 @@ The URL, **created** or **updated**, `<base>` ← `<branch>`, commits, draft, wh
 
 Profile:
 
-!`bash $DEV_SKILLS_LIB/profile.sh`
+!`bash "$DEV_SKILLS_LIB/profile.sh"`
 
 This branch, its base, its pull request, and the step:
 
-!`bash $DEV_SKILLS_LIB/pr-info.sh $ARGUMENTS 2>&1`
+!`bash "$DEV_SKILLS_LIB/pr-info.sh" $ARGUMENTS 2>&1`

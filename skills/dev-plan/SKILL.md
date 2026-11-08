@@ -74,11 +74,11 @@ Root — the plan goes under it, never `~`:
 
 Brief:
 
-!`bash $DEV_SKILLS_LIB/plan-input.sh $ARGUMENTS 2>&1`
+!`bash "$DEV_SKILLS_LIB/plan-input.sh" $ARGUMENTS 2>&1`
 
 Profile:
 
-!`bash $DEV_SKILLS_LIB/profile.sh`
+!`bash "$DEV_SKILLS_LIB/profile.sh"`
 
 Learned notes:
 

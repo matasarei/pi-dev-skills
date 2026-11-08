@@ -71,7 +71,7 @@ Lead with one line — `Ready to push` / `N blockers first` / `Ready, with N war
 
 Profile:
 
-!`bash $DEV_SKILLS_LIB/profile.sh`
+!`bash "$DEV_SKILLS_LIB/profile.sh"`
 
 Manual plan:
 
@@ -83,8 +83,8 @@ Red receipt:
 
 Queue — rank 1 is highest risk, top-down:
 
-!`bash $DEV_SKILLS_LIB/changed.sh`
+!`bash "$DEV_SKILLS_LIB/changed.sh"`
 
 Diff:
 
-!`bash $DEV_SKILLS_LIB/diff.sh`
+!`bash "$DEV_SKILLS_LIB/diff.sh"`
