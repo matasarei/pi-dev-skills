@@ -27,6 +27,8 @@
 # the nudge and not the repeated text, because Pi leaves an aborted reply out of it,
 # and a run started from agent_settled really runs.
 #
+# A test run that reports a block left open: the model sees which, in that result.
+#
 # A write of what the file already holds: the hook sees the content, the model sees
 # the refusal instead of Pi's "Successfully wrote", and the third one ends the run.
 #
@@ -335,6 +337,14 @@ expect("the model did not get every tool result", toolMessages.length === 8, too
 expect("the offer is on the wrong result", toolMessages.map((m) => m.includes(offer)).join() === "false,false,false,false,false,true,false,false", toolMessages.map((m) => m.includes(offer)))
 expect("the result lost its own text beside the offer", toolMessages[5]?.includes("run 5") && toolMessages[5]?.includes("1 failed"), toolMessages[5])
 expect("test-open.sh was refused on and after the 5th", !refused(r.tools[6] ?? { text: "dev-guard refuses:" }) && r.tools[6]?.text.startsWith("OPEN REFUSED"), r.tools[6])
+
+// A test run that fails on a block left open: the model sees where, in that result.
+mkdirSync(`${proj}/src`, { recursive: true })
+writeFileSync(`${proj}/src/city.test.ts`, readFileSync(`${root}/evals/pi/fixtures/brackets/edit-left-open.test.ts`, "utf8"))
+calls.syntax = ["bash", { command: "printf '/app/src/city.test.ts:355:0: ERROR: Unexpected end of file\\n'; exit 1" }]
+;[r] = await session(["syntax", "text"])
+const syntaxResult = JSON.stringify((bodies.at(-1)?.messages ?? []).filter((m) => m.role === "tool").at(-1)?.content ?? "")
+expect("the model did not see where the block is left open", syntaxResult.includes("Unexpected end of file") && syntaxResult.includes("src/city.test.ts has a block that never closes: line 66") && syntaxResult.includes("just before line 147"), syntaxResult)
 
 server.close()
 for (const f of fails) console.log(`FAIL  ${f}`)
