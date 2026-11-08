@@ -107,6 +107,28 @@ for (const [what, out] of [
 }
 const shown = syntaxHint(undefined, cwd)
 if (shown !== null) fails.push(`undefined output got a hint: ${shown}`)
+
+// The guard's tool_result handler. Pi chains handlers on the content (runner.js
+// emitToolResult), so one that ran before — commands.js's test-open offer — stays.
+const { default: devGuard } = await import(`${root}/pi/guard.js`)
+const handlers = {}
+devGuard({ on: (name, fn) => { (handlers[name] ??= []).push(fn) } })
+const onResult = handlers.tool_result?.[0]
+if (typeof onResult !== "function") fails.push("the guard has no tool_result handler")
+else {
+  const result = (toolName, ...texts) => onResult({ toolName, content: texts.map((text) => ({ type: "text", text })) }, { cwd })
+  const got = await result("bash", esbuild)
+  const texts = got?.content?.map((c) => c.text) ?? []
+  if (texts[0] !== esbuild) fails.push(`the test output was not kept first: ${JSON.stringify(texts[0])}`)
+  if (texts.length !== 2 || !/^\n\nsrc\/__tests__\/city\.test\.ts has a block that never closes/.test(texts[1] ?? "")) fails.push(`the hint was not added once after it: ${JSON.stringify(texts.slice(1))}`)
+  const offer = "\n\nThis step's tests have now failed 5 runs."
+  const both = (await result("bash", esbuild, offer))?.content?.map((c) => c.text) ?? []
+  if (both[1] !== offer || !/never closes/.test(both[2] ?? "")) fails.push(`the offer and the hint did not both land: ${JSON.stringify(both)}`)
+  for (const [what, tool, text] of [["a read of the same text", "read", esbuild], ["a bash result without a syntax error", "bash", "      Tests  48 passed (48)"]]) {
+    const r = await result(tool, text)
+    if (r !== undefined) fails.push(`${what} was changed: ${JSON.stringify(r)}`)
+  }
+}
 rmSync(cwd, { recursive: true, force: true })
 
 for (const f of fails) console.log(`FAIL  ${f}`)

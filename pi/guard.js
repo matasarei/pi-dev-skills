@@ -27,6 +27,10 @@
 // checkRejected sees them after the fact. Repairs change event.input in place, which
 // Pi runs.
 //
+// After a bash call that reports a syntax error in a JS/TS file under cwd, it adds
+// one line to the result: which block never closes and where its close belongs
+// (pi/brackets.js). The test output alone names only the file's last line.
+//
 // Quoted text is blanked first, so a commit message may mention a flag.
 // Everything else runs — gh pr create and gh pr ready included, which /dev-pr
 // uses on purpose. package.json lists this file under pi.extensions, so it is
@@ -40,6 +44,7 @@
 import { existsSync, statSync, readFileSync } from "node:fs"
 import { join, dirname, resolve } from "node:path"
 import { LIB, shellWord } from "./lib-path.js"
+import { syntaxHint } from "./brackets.js"
 
 const SEG = "[^|;&]*" // the rest of one command in a pipeline or chain
 const REFUSES = "dev-guard refuses: "
@@ -504,4 +509,10 @@ export default function devGuard(pi) {
   pi.on("tool_call", async (event, ctx) => check(event, ctx?.cwd || process.cwd(), loop))
   pi.on("tool_execution_start", (event) => { loop.started.set(event.toolCallId, { tool: event.toolName, args: event.args }) })
   pi.on("tool_execution_end", (event, ctx) => checkRejected(event, ctx, loop))
+  pi.on("tool_result", (event, ctx) => {
+    if (event?.toolName !== "bash") return undefined
+    const content = event.content ?? []
+    const hint = syntaxHint(content.map((c) => c.text ?? "").join(""), ctx?.cwd || process.cwd())
+    return hint ? { content: [...content, { type: "text", text: `\n\n${hint}` }] } : undefined
+  })
 }
