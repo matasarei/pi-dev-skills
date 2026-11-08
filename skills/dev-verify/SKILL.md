@@ -72,8 +72,8 @@ Lead with exactly one: **Works** — the checks that matter passed and the chang
 
 Profile:
 
-!`bash $DEV_SKILLS_LIB/profile.sh`
+!`bash "$DEV_SKILLS_LIB/profile.sh"`
 
 Changed, by risk:
 
-!`bash $DEV_SKILLS_LIB/changed.sh`
+!`bash "$DEV_SKILLS_LIB/changed.sh"`

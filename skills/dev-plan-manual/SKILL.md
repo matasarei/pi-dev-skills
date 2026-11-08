@@ -74,15 +74,15 @@ Never `Create:`, `Modify:` or `Test:` in a walkthrough — `steps.awk` reads tho
 
 Root (never `~`), then the brief; its kind is on line 2:
 
-!`pwd; bash $DEV_SKILLS_LIB/plan-input.sh $ARGUMENTS 2>&1`
+!`pwd; bash "$DEV_SKILLS_LIB/plan-input.sh" $ARGUMENTS 2>&1`
 
 The step, if named:
 
-!`bash $DEV_SKILLS_LIB/task-step.sh $ARGUMENTS 2>&1`
+!`bash "$DEV_SKILLS_LIB/task-step.sh" $ARGUMENTS 2>&1`
 
 Profile:
 
-!`bash $DEV_SKILLS_LIB/profile.sh`
+!`bash "$DEV_SKILLS_LIB/profile.sh"`
 
 Learned:
 

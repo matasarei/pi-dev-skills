@@ -76,7 +76,7 @@ Write `AGENTS.md`. Never create `CLAUDE.md` stubs — Pi reads `AGENTS.md` first
 
 Profile:
 
-!`bash $DEV_SKILLS_LIB/profile.sh`
+!`bash "$DEV_SKILLS_LIB/profile.sh"`
 
 Existing instruction files:
 

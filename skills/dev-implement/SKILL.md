@@ -64,11 +64,11 @@ Then: `Next: /dev-review`. After `/dev-pr`, the next step: `/dev-implement <task
 
 Branch:
 
-!`bash $DEV_SKILLS_LIB/step-start.sh $ARGUMENTS 2>&1`
+!`bash "$DEV_SKILLS_LIB/step-start.sh" $ARGUMENTS 2>&1`
 
 Profile:
 
-!`bash $DEV_SKILLS_LIB/profile.sh`
+!`bash "$DEV_SKILLS_LIB/profile.sh"`
 
 Branch and working tree:
 
@@ -80,4 +80,4 @@ Learned notes:
 
 The step:
 
-!`bash $DEV_SKILLS_LIB/task-step.sh $ARGUMENTS 2>&1`
+!`bash "$DEV_SKILLS_LIB/task-step.sh" $ARGUMENTS 2>&1`

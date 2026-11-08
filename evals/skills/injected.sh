@@ -132,6 +132,21 @@ for skill in "$skills"/*/SKILL.md; do
   fi
 done
 
+# A checkout at a path with a space: the injections run with DEV_SKILLS_LIB set
+# to it, so an unquoted $DEV_SKILLS_LIB splits into two words and bash is handed
+# a file that isn't there. lib/ finds its siblings by its own dirname, so a copy
+# of it stands in for the checkout.
+spaced="$work/a checkout/lib"
+mkdir -p "$(dirname "$spaced")" && cp -R "$root/lib" "$spaced"
+for skill in "$skills"/*/SKILL.md; do
+  name="$(basename "$(dirname "$skill")")"
+  grep -q '^!`' "$skill" || continue
+  block="$(cd "$proj" && DEV_SKILLS_LIB="$spaced" node "$root/pi/expand.js" --offline "$skill" "$(args_for "$name")" 2>&1)"
+  printf '%s\n' "$block" | grep -q 'No such file or directory' \
+    && note "$name: from a lib at a path with a space, an injection could not run: $(printf '%s\n' "$block" | grep -m1 'No such file or directory')"
+  [ "$name" = dev-implement ] && git -C "$proj" switch -q main
+done
+
 # dev-review names a manual plan only when it is this branch's plan. A stray
 # one elsewhere in .tasks/ used to turn every review's findings into "fix it by
 # hand". The branch step/<slug>-<n> belongs to .tasks/<slug>.md, as branch.sh

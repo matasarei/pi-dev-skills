@@ -31,7 +31,7 @@ flat "$plan" | grep -q 'never - \[ \]' || note 'dev-plan: does not warn that "- 
 for tool in plan-input.sh plan-check.sh step-budget.sh learned.md; do
   grep -q "$tool" "$plan" || note "dev-plan: never names $tool"
 done
-grep -q '^!`.*plan-input.sh \$ARGUMENTS' "$plan" || note 'dev-plan: the brief is not injected through plan-input.sh $ARGUMENTS'
+grep -q '^!`.*plan-input.sh" \$ARGUMENTS' "$plan" || note 'dev-plan: the brief is not injected through plan-input.sh $ARGUMENTS'
 flat "$plan" | grep -q 'OVER — kept:' || note 'dev-plan: an unsplittable OVER step has no wording to keep it'
 flat "$plan" | grep -q '\[assumed\]' || note 'dev-plan: unanswered questions are not tagged [assumed]'
 flat "$plan" | grep -q 'Shell before reading' || note 'dev-plan: the CLI-first block is missing'
@@ -54,7 +54,7 @@ flat "$impl" | grep -q 'NO STEPS → print Next: /dev-plan <task-file> and stop'
 # step-start.sh runs branch.sh before the model reads anything and turns any
 # other answer into a STOP that pi/commands.js never sends, so what has to hold
 # is that the injection is there and the model is told not to branch itself.
-grep -q '^!`.*step-start.sh \$ARGUMENTS' "$impl" || note 'dev-implement: no step-start.sh injection — the model would be left to run branch.sh itself'
+grep -q '^!`.*step-start.sh" \$ARGUMENTS' "$impl" || note 'dev-implement: no step-start.sh injection — the model would be left to run branch.sh itself'
 flat "$impl" | grep -q 'never run branch.sh' || note 'dev-implement: does not tell the model never to run branch.sh itself'
 flat "$impl" | grep -q 'test.sh --scoped <name>' || note 'dev-implement: the scoped test command is not spelled out'
 flat "$impl" | grep -q 'never cat them' || note 'dev-implement: no rule against reading the lib scripts'
