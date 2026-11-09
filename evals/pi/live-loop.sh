@@ -23,6 +23,9 @@
 # A step's 5th failing test run: the model sees the note in that tool result, through
 # Pi's tool_result hook, and test-open.sh is refused until then.
 #
+# A test the step wrote that fails twice the same way: the 2nd result carries the test
+# traced line by line, run through the profile's testScoped before the model reads it.
+#
 # A runaway reply, stopped mid-stream during a /dev-* command: the next request has
 # the nudge and not the repeated text, because Pi leaves an aborted reply out of it,
 # and a run started from agent_settled really runs.
@@ -51,7 +54,7 @@ mkdir -p "$work/agent" "$work/proj"
 cat > "$work/run.mjs" <<'JS'
 import { execFileSync, spawn } from "node:child_process"
 import { createServer } from "node:http"
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { createInterface } from "node:readline"
 const [root, work] = process.argv.slice(2)
 const proj = `${work}/proj`
@@ -338,6 +341,39 @@ expect("the offer is on the wrong result", toolMessages.map((m) => m.includes(of
 expect("the result lost its own text beside the offer", toolMessages[5]?.includes("run 5") && toolMessages[5]?.includes("1 failed"), toolMessages[5])
 expect("test-open.sh was refused on and after the 5th", !refused(r.tools[6] ?? { text: "dev-guard refuses:" }) && r.tools[6]?.text.startsWith("OPEN REFUSED"), r.tools[6])
 
+// A test the step wrote fails twice the same way: the 2nd result carries its trace, run
+// before the model reads it, through the profile's testScoped. vitest is a stand-in that
+// runs the copy it is given with node; profile.sh finds it as npm test's vitest.
+mkdirSync(`${proj}/src`, { recursive: true })
+mkdirSync(`${proj}/node_modules/.bin`, { recursive: true })
+writeFileSync(`${proj}/package.json`, JSON.stringify({ name: "p", private: true, scripts: { test: "vitest run" } }))
+writeFileSync(`${proj}/node_modules/.bin/vitest`, '#!/usr/bin/env bash\nexec node "$2"\n', { mode: 0o755 })
+writeFileSync(`${proj}/src/harness.mjs`, [
+  "const tests = []",
+  "export const it = (name, fn) => tests.push({ name, fn })",
+  "it.only = (name, fn) => tests.push({ name, fn, only: true })",
+  'export const expect = (v) => ({ toBe: (w) => { if (!Object.is(v, w)) { const e = new Error("expected " + v + " to be " + w); e.name = "AssertionError"; throw e } } })',
+  'process.on("beforeExit", () => { for (const t of tests.filter((t) => t.only)) { try { t.fn() } catch (e) { console.log(" FAIL  " + t.name); console.log(e.name + ": " + e.message) } } })',
+  "",
+].join("\n"))
+writeFileSync(`${proj}/.gitignore`, ".tasks/\n.devskills/\n.pi/\nnode_modules/\n")
+git("add", ".")
+git("commit", "-qm", "a vitest project")
+// profile.sh wraps a node project's tests in `docker run … node:lts-alpine`; here they run
+// on the host, so its cache — what lib/ and the guard read — gets the host commands.
+execFileSync("bash", [`${root}/lib/profile.sh`, "--reprofile"], { cwd: proj, stdio: "ignore" })
+const prof = JSON.parse(readFileSync(`${proj}/.devskills/profile.json`, "utf8"))
+writeFileSync(`${proj}/.devskills/profile.json`, JSON.stringify({ ...prof, test: "npm test", testScoped: "npm test -- {name}" }, null, 2) + "\n")
+calls.writesTest = ["write", { path: "src/a.test.mjs", content: 'import { it, expect } from "./harness.mjs"\n\nit("adds", () => {\n  let total = 0\n  total += 2\n  expect(total).toBe(3)\n})\n' }]
+calls.failsAdds = ["bash", { command: "printf ' FAIL  src/a.test.mjs > adds\\nAssertionError: expected 2 to be 3\\n      Tests  1 failed (1)\\n'; exit 1" }]
+;[r] = await session(["writesTest", "failsAdds", "failsAdds", "text"], ["/dev-implement .tasks/t.md"], [commandsExt], { httpIdleTimeoutMs: 1200000 })
+const traceResults = (bodies.at(-1)?.messages ?? []).filter((m) => m.role === "tool").map((m) => JSON.stringify(m.content))
+const tracedIt = "so the guard ran it once more and traced it"
+expect("the step's test runs did not all reach the model", traceResults.length === 3, traceResults.length)
+expect("the trace is on the wrong result", traceResults.map((m) => m.includes(tracedIt)).join() === "false,false,true", traceResults.map((m) => m.includes(tracedIt)))
+expect("the model did not see what the line returned", traceResults[2]?.includes("5| total += 2   returned 2 → total = 2") && traceResults[2]?.includes("6| expect(total).toBe(3)   fails: expected 2 to be 3"), traceResults[2])
+expect("a traced copy was left in the project", !readdirSync(`${proj}/src`).some((f) => f.includes(".trace.")), readdirSync(`${proj}/src`))
+
 // A test run that fails on a block left open: the model sees where, in that result.
 mkdirSync(`${proj}/src`, { recursive: true })
 writeFileSync(`${proj}/src/city.test.ts`, readFileSync(`${root}/evals/pi/fixtures/brackets/edit-left-open.test.ts`, "utf8"))
@@ -352,7 +388,7 @@ process.exit(fails.length ? 1 : 0)
 JS
 
 if node "$work/run.mjs" "$root" "$work"; then
-  printf 'live-loop: real Pi stops every loop it should and no other run, and a silent call follows the idle timeout, and a runaway reply is stopped and nudged\n'
+  printf 'live-loop: real Pi stops every loop it should and no other run, and a silent call follows the idle timeout, and a runaway reply is stopped and nudged, and a step'"'"'s own failing test is traced\n'
   exit 0
 fi
 printf 'live-loop: case(s) failed\n' >&2
