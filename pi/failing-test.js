@@ -34,6 +34,22 @@ export function failingTests(output) {
   return [...found.values()]
 }
 
+// [{ file, name }] — tests a vitest output shows passing by name (" ✓ <file> > … > <name>").
+export function passingTests(output) {
+  if (typeof output !== "string") return []
+  const out = []
+  for (const line of output.split("\n")) {
+    const m = /^\s*✓\s+(\S+\.test\.[cm]?[jt]sx?) > (.*)$/.exec(line)
+    if (m) out.push({ file: m[1], name: m[2].split(" > ").pop().replace(/\s+\d+ms$/, "").trim() })
+  }
+  return out
+}
+
+// Whether a vitest output's summary says that nothing failed: "Tests  3 passed (3)".
+export function nothingFailed(output) {
+  return typeof output === "string" && /^\s*Tests\s+\d+ passed\b/m.test(output) && !/^\s*Tests\s.*\bfailed\b/m.test(output)
+}
+
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 const indent = (l) => l.match(/^[ \t]*/)[0].replace(/\t/g, "    ").length
 

@@ -36,7 +36,7 @@ import { projectFile } from "./brackets.js"
 import { isCutOff, withRetrySettings, withSmallerAsk } from "./cut-off.js"
 import { description, expandSkill } from "./expand.js"
 import { failedTestRun, OFFER, OFFER_AT } from "./failing-runs.js"
-import { addedByStep, failingTests } from "./failing-test.js"
+import { addedByStep, failingTests, nothingFailed, passingTests } from "./failing-test.js"
 import { runTrace, traceNote } from "./test-trace.js"
 import { idleProblem, isLocalUrl } from "./idle-timeout.js"
 import { LIB as lib } from "./lib-path.js"
@@ -221,6 +221,14 @@ export function gate(state, event, cwd) {
   return undefined
 }
 
+// A run whose summary says nothing failed starts every test's count again, and a test
+// shown passing by name starts its own, so "in a row" holds across a fix.
+function restartCounts(state, text) {
+  if (!state.tests) return
+  if (nothingFailed(text)) { state.tests = {}; return }
+  for (const t of passingTests(text)) delete state.tests[`${t.file}\0${t.name}`]
+}
+
 // The test to trace in a failing run's output, or null: the first one the step added
 // whose 2nd failing run in a row has the same result (a run that names it without a
 // result counts as the same), once until its result changes.
@@ -249,6 +257,7 @@ function toTrace(state, text, cwd) {
 export async function onToolResult(state, event, cwd) {
   if (!state || event.toolName !== "bash") return undefined
   const text = (event.content ?? []).map((c) => c.text ?? "").join("")
+  restartCounts(state, text)
   if (!failedTestRun(text)) return undefined
   state.failingRuns = (state.failingRuns ?? 0) + 1
   const notes = []

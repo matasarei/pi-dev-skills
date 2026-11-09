@@ -163,6 +163,24 @@ const both = stepState()
 const pair = out(["adds", "expected 2 to be 3"], ["adds more", "expected 5 to be 6"])
 const r1 = await onToolResult(both, pair, dir), r2 = await onToolResult(both, pair, dir), r3 = await onToolResult(both, pair, dir)
 if (traced(r1) || (added(r2).match(/traced it/g) ?? []).length !== 1 || !added(r2).includes("`adds` failed") || !added(r3).includes("`adds more` failed")) fails.push(`two at once: ${JSON.stringify([added(r1), added(r2), added(r3)])}`)
+// "In a row": a run in between where the tests pass, or where the test is shown passing,
+// starts its count again, so the next failure is a 1st, not a 2nd.
+const bash = (text) => ({ toolName: "bash", content: [{ type: "text", text }] })
+const one = out(["adds", "expected 2 to be 3"])
+for (const [what, between] of [
+  ["a vitest run with nothing failing", bash(" ✓ src/a.test.mjs (3 tests) 4ms\n      Tests  3 passed (3)\n")],
+  ["the test shown passing by name", bash(" ✓ src/a.test.mjs > adds 1ms\n")],
+]) {
+  const st = stepState()
+  const seq = [await onToolResult(st, one, dir), await onToolResult(st, between, dir), await onToolResult(st, one, dir)]
+  if (seq.some(traced)) fails.push(`${what} didn't restart the count: ${seq.map(traced)}`)
+}
+{
+  // Another test shown passing, or a run that still fails something, doesn't restart this one.
+  const st = stepState()
+  const seq = [await onToolResult(st, one, dir), await onToolResult(st, bash(" ✓ src/a.test.mjs > was there 1ms\n"), dir), await onToolResult(st, one, dir)]
+  if (!traced(seq[2])) fails.push(`another test passing restarted this one's count: ${seq.map(traced)}`)
+}
 rmSync(dir, { recursive: true, force: true })
 
 for (const f of fails) console.log(`FAIL  ${f}`)
