@@ -181,6 +181,13 @@ for (const [what, between] of [
   const seq = [await onToolResult(st, one, dir), await onToolResult(st, bash(" ✓ src/a.test.mjs > was there 1ms\n"), dir), await onToolResult(st, one, dir)]
   if (!traced(seq[2])) fails.push(`another test passing restarted this one's count: ${seq.map(traced)}`)
 }
+// The same test as two spellings of its path (the container's /app/src/… and src/…) is one count.
+{
+  const st = stepState()
+  const appPath = { toolName: "bash", content: [{ type: "text", text: one.content[0].text.replace("src/a.test.mjs", "/app/src/a.test.mjs") }] }
+  const seq = [await onToolResult(st, one, dir), await onToolResult(st, appPath, dir)]
+  if (!traced(seq[1])) fails.push(`/app/src/a.test.mjs and src/a.test.mjs counted apart: ${seq.map(traced)}`)
+}
 rmSync(dir, { recursive: true, force: true })
 
 for (const f of fails) console.log(`FAIL  ${f}`)

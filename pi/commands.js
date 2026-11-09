@@ -221,12 +221,19 @@ export function gate(state, event, cwd) {
   return undefined
 }
 
+// A test's key: its file as cwd has it, however the runner spelled the path (a container
+// prints /app/src/x.test.ts for cwd's src/x.test.ts), and its name.
+function testKey(t, cwd) {
+  const file = projectFile(t.file, cwd)
+  return `${file ? relative(cwd, file) : t.file}\0${t.name}`
+}
+
 // A run whose summary says nothing failed starts every test's count again, and a test
 // shown passing by name starts its own, so "in a row" holds across a fix.
-function restartCounts(state, text) {
+function restartCounts(state, text, cwd) {
   if (!state.tests) return
   if (nothingFailed(text)) { state.tests = {}; return }
-  for (const t of passingTests(text)) delete state.tests[`${t.file}\0${t.name}`]
+  for (const t of passingTests(text)) delete state.tests[testKey(t, cwd)]
 }
 
 // The test to trace in a failing run's output, or null: the first one the step added
@@ -236,8 +243,7 @@ function toTrace(state, text, cwd) {
   state.tests ??= {}
   let pick = null
   for (const t of failingTests(text)) {
-    const key = `${t.file}\0${t.name}`
-    const seen = (state.tests[key] ??= { count: 0, result: null, shown: false })
+    const seen = (state.tests[testKey(t, cwd)] ??= { count: 0, result: null, shown: false })
     if (t.result && seen.result && t.result !== seen.result) Object.assign(seen, { count: 0, shown: false })
     seen.count++
     if (t.result) seen.result = t.result
@@ -257,7 +263,7 @@ function toTrace(state, text, cwd) {
 export async function onToolResult(state, event, cwd) {
   if (!state || event.toolName !== "bash") return undefined
   const text = (event.content ?? []).map((c) => c.text ?? "").join("")
-  restartCounts(state, text)
+  restartCounts(state, text, cwd)
   if (!failedTestRun(text)) return undefined
   state.failingRuns = (state.failingRuns ?? 0) + 1
   const notes = []
