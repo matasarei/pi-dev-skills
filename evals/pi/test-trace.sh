@@ -136,6 +136,16 @@ const run = (text, name) => {
   if (!note?.includes("3| let n = 1   → n = 1\n4| n += 1   returned 2\n5| const y = n * 2   → y = 4")) fails.push(`late note: ${note}`)
 }
 {
+  // A declaration over two lines is one statement: traced once, after its last line, and shown from its first.
+  const text = 'import { describe, it, expect } from "./harness.mjs"\nit("split", () => {\n  const y = 2 *\n    3\n  expect(y).toBe(7)\n})\n'
+  const r = run(text, "split")
+  if (!r || !same(r.i.rows.map((x) => [x.line, x.kind]), [[3, "decl"], [5, "expect"]])) fails.push(`split rows: ${JSON.stringify(r?.i.rows)}`)
+  if (!r?.i.source.split("\n")[3].endsWith("3; __devTrace(3, y);")) fails.push(`split: the trace isn't after the last line: ${r?.i.source.split("\n")[3]}`)
+  if ((r?.out.match(/"line":3/g) ?? []).length !== 1) fails.push(`split: line 3 traced ${(r?.out.match(/"line":3/g) ?? []).length} times`)
+  const note = r && traceNote(r.trace, "src/a.test.mjs", "split")
+  if (!note?.includes("3| const y = 2 * …   → y = 6\n5| expect(y).toBe(7)   fails: expected 6 to be 7")) fails.push(`split note: ${note}`)
+}
+{
   // Nothing traced (the run never reached the test): no note.
   const i = instrument(counter, "adds")
   if (traceNote(readTrace("Error: Cannot find module './harness.mjs'\n", i), "src/a.test.mjs", "adds") !== null) fails.push("a run with no trace rows made a note")
