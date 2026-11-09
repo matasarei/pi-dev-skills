@@ -17,11 +17,11 @@ command -v node >/dev/null 2>&1 || { printf 'test-trace: node is required — no
 
 node --input-type=module - "$root" <<'JS'
 import { execFileSync } from "node:child_process"
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 const root = process.argv[2]
-const { instrument, readTrace, traceNote } = await import(`${root}/pi/test-trace.js`)
+const { instrument, readTrace, traceNote, runTrace } = await import(`${root}/pi/test-trace.js`)
 const fails = []
 const same = (got, want) => JSON.stringify(got) === JSON.stringify(want)
 const fx = `${root}/evals/pi/fixtures/failing-test`
@@ -139,6 +139,51 @@ const run = (text, name) => {
   // Nothing traced (the run never reached the test): no note.
   const i = instrument(counter, "adds")
   if (traceNote(readTrace("Error: Cannot find module './harness.mjs'\n", i), "src/a.test.mjs", "adds") !== null) fails.push("a run with no trace rows made a note")
+}
+
+// --- runTrace: through the profile's testScoped, in a project whose vitest is a stand-in
+// that runs the file it is given with node. npm puts node_modules/.bin on the PATH.
+const proj = join(dir, "proj")
+mkdirSync(join(proj, "src"), { recursive: true })
+mkdirSync(join(proj, "node_modules/.bin"), { recursive: true })
+mkdirSync(join(proj, ".devskills"))
+writeFileSync(join(proj, "package.json"), JSON.stringify({ name: "p", private: true, scripts: { test: "vitest run", "test:slow": "vitest run --slow" } }))
+writeFileSync(join(proj, "node_modules/.bin/vitest"), '#!/usr/bin/env bash\n[ "$2" = "--slow" ] && { sleep 5; shift; }\nexec node "$2"\n')
+chmodSync(join(proj, "node_modules/.bin/vitest"), 0o755)
+writeFileSync(join(proj, "src/harness.mjs"), readFileSync(join(dir, "harness.mjs"), "utf8"))
+writeFileSync(join(proj, "src/a.test.mjs"), counter)
+const profile = (testScoped) => writeFileSync(join(proj, ".devskills/profile.json"), JSON.stringify({ test: "npm test", testScoped }, null, 2))
+const leftovers = () => readdirSync(join(proj, "src")).filter((f) => f.includes(".trace."))
+const file = join(proj, "src/a.test.mjs")
+if (typeof runTrace !== "function") fails.push("runTrace isn't exported")
+else {
+  profile("npm test -- {name}")
+  const r = await runTrace(proj, file, "adds")
+  const note = r.trace && traceNote(r.trace, "src/a.test.mjs", "adds")
+  if (!note?.includes("7| c.add(2);   returned 2 → c.total = 2") || !note.endsWith("10| expect(c.total) …   fails: expected 5 to be 6")) fails.push(`runTrace through npm test: ${JSON.stringify(r)} ${note}`)
+  if (leftovers().length) fails.push(`the copy was left behind: ${leftovers()}`)
+  if (readFileSync(file, "utf8") !== counter) fails.push("the test file itself changed")
+
+  // An npm script by another name that runs vitest, as the bench's test:coverage does.
+  profile("npm run test:slow -- {name}")
+  const slow = await runTrace(proj, file, "adds", { timeoutMs: 1000 })
+  if (!slow.error || !/timed out/.test(slow.error)) fails.push(`a run past the limit isn't an error: ${JSON.stringify(slow)}`)
+  if (leftovers().length) fails.push(`the copy was left behind after a timeout: ${leftovers()}`)
+
+  for (const [what, setup] of [
+    ["a testScoped that isn't vitest", () => profile("pytest -k {name}")],
+    ["a testScoped with no {name}", () => profile("npm test")],
+    ["no profile", () => rmSync(join(proj, ".devskills/profile.json"))],
+  ]) {
+    setup()
+    const u = await runTrace(proj, file, "adds")
+    if (!u.unsupported) fails.push(`${what}: ${JSON.stringify(u)}`)
+    if (leftovers().length) fails.push(`${what}: a copy was written`)
+  }
+  profile("npm test -- {name}")
+  const none = await runTrace(proj, file, "no such test")
+  if (!none.unsupported) fails.push(`a test not in the file: ${JSON.stringify(none)}`)
+  if (!existsSync(file)) fails.push("the test file is gone")
 }
 rmSync(dir, { recursive: true, force: true })
 

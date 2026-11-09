@@ -14,7 +14,13 @@
 // The scanner skips strings, template text and comments; it doesn't know regex
 // literals, which a test body rarely has at its top level. This isn't an extension.
 
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { basename, dirname, join, relative } from "node:path"
+import { run } from "./expand.js"
 import { testBlock } from "./failing-test.js"
+import { shellWord } from "./lib-path.js"
+
+const TIMEOUT_MS = 90000
 
 const KEYWORD = /^(if|for|while|do|switch|return|try|throw|else|class|function|async\s+function|\{)\b|^\{/
 const DECL = /^(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]+)?=(?!=)/
@@ -218,4 +224,42 @@ export function traceNote(trace, file, name) {
     ? `\`${name}\` failed again with the same result, so the guard ran it once more and traced it (${file}).`
     : `\`${name}\` failed again with the same result, but passed when the guard ran it alone (${file}).`
   return `${head} Each line, what it returned, and the values its expects check right after it:\n${out.join("\n")}`
+}
+
+// Whether testScoped runs vitest: it names vitest, or runs an npm script that does.
+function runsVitest(command, cwd) {
+  if (/\bvitest\b/.test(command)) return true
+  const m = /\bnpm\s+(?:run(?:-script)?\s+([^\s"';&|]+)|(?:test|t)\b)/.exec(command)
+  if (!m) return false
+  let scripts
+  try { scripts = JSON.parse(readFileSync(join(cwd, "package.json"), "utf8")).scripts ?? {} } catch { return false }
+  return /^vitest\b/.test(String(scripts[m[1] ?? "test"] ?? ""))
+}
+
+// Runs the test once, traced: { trace } from readTrace(), or { unsupported } (no vitest
+// testScoped with {name}, no such test) or { error } (the run didn't finish in time).
+// The copy sits beside the file as <base>.trace.<ext>, so its imports resolve, and is
+// removed whatever happens. The profile's testScoped runs it, as lib/test.sh would, but
+// nothing is written to .devskills/test-result: this isn't a verdict.
+export async function runTrace(cwd, file, name, { timeoutMs = TIMEOUT_MS } = {}) {
+  let command
+  try { command = JSON.parse(readFileSync(join(cwd, ".devskills/profile.json"), "utf8")).testScoped } catch { return { unsupported: "no profile" } }
+  if (typeof command !== "string" || !command.includes("{name}")) return { unsupported: "no testScoped with {name}" }
+  if (!runsVitest(command, cwd)) return { unsupported: "testScoped doesn't run vitest" }
+  let text
+  try { text = readFileSync(file, "utf8") } catch { return { unsupported: "the test file can't be read" } }
+  const inst = instrument(text, name)
+  if (!inst) return { unsupported: "the test isn't found, or its body doesn't open on its it( line" }
+  const m = /^(.*?)(\.test\.[^.]+)$/.exec(basename(file))
+  if (!m) return { unsupported: "not a .test. file" }
+  const copy = join(dirname(file), `${m[1]}.trace${m[2]}`)
+  if (existsSync(copy)) return { unsupported: `${basename(copy)} is already there` }
+  try {
+    writeFileSync(copy, inst.source)
+    const output = await run(command.split("{name}").join(shellWord(relative(cwd, copy))), { cwd, timeoutMs })
+    if (/\(timed out after \d+s\)$/.test(output)) return { error: `the traced run timed out after ${Math.round(timeoutMs / 1000)}s` }
+    return { trace: readTrace(output, inst) }
+  } finally {
+    rmSync(copy, { force: true })
+  }
 }
