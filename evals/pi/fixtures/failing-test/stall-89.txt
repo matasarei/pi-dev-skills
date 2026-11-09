@@ -1,0 +1,14 @@
+stdout | src/__tests__/cityManager.test.ts > CityManager > Funds > should not deduct cost when placing Transit on an entity
+LandingBase placed at 3, 6: true
+LandingBase placed at 6, 3: true
+
+--
+   ❯ src/__tests__/cityManager.test.ts > CityManager > Funds > should not deduct cost when placing Transit on an entity
+     → expected 1900 to be 2000 // Object.is equality
+   ❯ src/__tests__/cityManager.test.ts > CityManager > Funds > should not deduct cost when placing PowerLine on an entity
+     → expected 1900 to be 2000 // Object.is equality
+--
+ FAIL  src/__tests__/cityManager.test.ts > CityManager > Funds > should not deduct cost when placing Transit on an entity
+AssertionError: expected 1900 to be 2000 // Object.is equality
+
+- Expected

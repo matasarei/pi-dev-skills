@@ -1,0 +1,4 @@
+ FAIL  src/__tests__/cityManager.test.ts > CityManager > Funds > should not deduct cost when funds are insufficient
+ FAIL  src/__tests__/cityManager.test.ts > CityManager > Funds > should deduct correct cost for each zone type
+ FAIL  src/__tests__/cityManager.test.ts > CityManager > Funds > should not deduct cost when placing Transit on an entity
+ FAIL  src/__tests__/cityManager.test.ts > CityManager > Funds > should not deduct cost when placing PowerLine on an entity

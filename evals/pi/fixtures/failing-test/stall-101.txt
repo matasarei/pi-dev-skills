@@ -1,0 +1,35 @@
+stdout | src/__tests__/cityManager.test.ts > CityManager > Funds > should not deduct cost when funds are insufficient
+LandingBase placed at 3, 7: true
+LandingBase placed at 7, 4: true
+
+stdout | src/__tests__/cityManager.test.ts > CityManager > Funds > should allow placement when funds exactly match the cost
+LandingBase placed at 6, 6: true
+LandingBase placed at 7, 6: true
+
+stdout | src/__tests__/cityManager.test.ts > CityManager > Funds > should deduct correct cost for each zone type
+LandingBase placed at 5, 3: true
+LandingBase placed at 4, 4: true
+--
+   ❯ src/__tests__/cityManager.test.ts > CityManager > Funds > should not deduct cost when funds are insufficient
+     → expected true to be false // Object.is equality
+   ❯ src/__tests__/cityManager.test.ts > CityManager > Funds > should deduct correct cost for each zone type
+     → expected 1935 to be 1435 // Object.is equality
+   ❯ src/__tests__/cityManager.test.ts > CityManager > Funds > should not deduct cost when placing Transit on an entity
+     → expected 1900 to be 2000 // Object.is equality
+   ❯ src/__tests__/cityManager.test.ts > CityManager > Funds > should not deduct cost when placing PowerLine on an entity
+     → expected 1900 to be 2000 // Object.is equality
+stdout | src/__tests__/cityManager.test.ts > CityManager > Micro Zones (1x1) > should return false for out of bounds placement/clear
+LandingBase placed at 7, 5: true
+
+--
+ FAIL  src/__tests__/cityManager.test.ts > CityManager > Funds > should not deduct cost when funds are insufficient
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/__tests__/cityManager.test.ts:88:29
+     86|             // Residential costs 100, but we only have 50

@@ -1,0 +1,40 @@
+
+ ❯ src/__tests__/cityManager.test.ts:155:31
+    153|             expect(success).toBe(false);
+    154|             // Funds should be unchanged (placement failed)
+    155|             expect(mgr.funds).toBe(2000);
+       |                               ^
+    156|         });
+    157| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  src/__tests__/cityManager.test.ts > CityManager > Funds > should not deduct cost when placing PowerLine on an entity
+AssertionError: expected 1900 to be 2000 // Object.is equality
+
+- Expected
++ Received
+
+- 2000
++ 1900
+
+ ❯ src/__tests__/cityManager.test.ts:168:31
+    166|             expect(success).toBe(false);
+    167|             // Funds should be unchanged (placement failed)
+    168|             expect(mgr.funds).toBe(2000);
+       |                               ^
+    169|         });
+    170| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 34 passed (38)
+   Start at  15:00:28
+   Duration  1.55s (transform 62ms, setup 0ms, collect 62ms, tests 15ms, environment 792ms, prepare 125ms)
+
+npm notice
+npm notice New major version of npm available! 11.16.0 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice
