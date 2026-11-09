@@ -125,7 +125,8 @@ const CODE_PATH = /[\w./@-]+\.[cm]?[jt]sx?(?=:\d|\(\d+,)/g
 
 // The file a path in tool output means, inside cwd: a container's /app/src/x.ts is
 // cwd's src/x.ts, the longest tail of the path that exists. Never outside cwd.
-function projectFile(path, cwd) {
+// pi/commands.js uses it too, for the test file a failing run names.
+export function projectFile(path, cwd) {
   const parts = path.split("/").filter((p) => p && p !== ".")
   if (parts.includes("..")) return null
   for (let k = 0; k < parts.length; k++) {

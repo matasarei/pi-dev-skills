@@ -1,0 +1,45 @@
+
+ RUN  v1.6.1 /app
+
+stdout | src/__tests__/cityManager.test.ts > CityManager > Micro Zones (1x1) > Funds > should handle multiple placements deducting correctly
+LandingBase placed at 7, 3: true
+LandingBase placed at 5, 6: true
+
+ ❯ src/__tests__/cityManager.test.ts  (29 tests | 1 failed | 28 skipped) 5ms
+   ❯ src/__tests__/cityManager.test.ts > CityManager > Micro Zones (1x1) > Funds > should handle multiple placements deducting correctly
+     → expected 840 to be 740 // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/cityManager.test.ts > CityManager > Micro Zones (1x1) > Funds > should handle multiple placements deducting correctly
+AssertionError: expected 840 to be 740 // Object.is equality
+
+- Expected
++ Received
+
+- 740
++ 840
+
+ ❯ src/__tests__/cityManager.test.ts:222:39
+    220|                 manager.placeZone(8, 8, ZoneType.Commercial); // 150
+    221|                 manager.placeZone(2, 2, ZoneType.Transit); // 10
+    222|                 expect(manager.funds).toBe(740);
+       |                                       ^
+    223|             });
+    224| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 28 skipped (29)
+   Start at  22:42:16
+   Duration  2.96s (transform 48ms, setup 0ms, collect 51ms, tests 5ms, environment 501ms, prepare 118ms)
+
+npm notice
+npm notice New major version of npm available! 11.16.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice
+
+
+Command exited with code 1

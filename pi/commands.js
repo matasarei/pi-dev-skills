@@ -24,15 +24,20 @@
 // count, and it's off for the person's own prompts too.
 //
 // It also counts a step's failing test runs (pi/failing-runs.js), and on the 5th tells
-// the model about lib/test-open.sh, which it refuses before then.
+// the model about lib/test-open.sh, which it refuses before then. On the 2nd failing run
+// with the same result for a test the step added, it runs that test once more, traced,
+// and appends each line's values (pi/test-trace.js).
 
 import { execFileSync } from "node:child_process"
 import { existsSync, readdirSync, readFileSync } from "node:fs"
-import { dirname, isAbsolute, join } from "node:path"
+import { dirname, isAbsolute, join, relative } from "node:path"
 import { fileURLToPath } from "node:url"
+import { projectFile } from "./brackets.js"
 import { isCutOff, withRetrySettings, withSmallerAsk } from "./cut-off.js"
 import { description, expandSkill } from "./expand.js"
 import { failedTestRun, OFFER, OFFER_AT } from "./failing-runs.js"
+import { addedByStep, failingTests, nothingFailed, passingTests } from "./failing-test.js"
+import { runTrace, traceNote } from "./test-trace.js"
 import { idleProblem, isLocalUrl } from "./idle-timeout.js"
 import { LIB as lib } from "./lib-path.js"
 import { createWatch, NUDGE, STOP_AT } from "./runaway.js"
@@ -216,6 +221,63 @@ export function gate(state, event, cwd) {
   return undefined
 }
 
+// A test's key: its file as cwd has it, however the runner spelled the path (a container
+// prints /app/src/x.test.ts for cwd's src/x.test.ts), and its name.
+function testKey(t, cwd) {
+  const file = projectFile(t.file, cwd)
+  return `${file ? relative(cwd, file) : t.file}\0${t.name}`
+}
+
+// A run whose summary says nothing failed starts every test's count again, and a test
+// shown passing by name starts its own, so "in a row" holds across a fix.
+function restartCounts(state, text, cwd) {
+  if (!state.tests) return
+  if (nothingFailed(text)) { state.tests = {}; return }
+  for (const t of passingTests(text)) delete state.tests[testKey(t, cwd)]
+}
+
+// The test to trace in a failing run's output, or null: the first one the step added
+// whose 2nd failing run in a row has the same result (a run that names it without a
+// result counts as the same), once until its result changes.
+function toTrace(state, text, cwd) {
+  state.tests ??= {}
+  let pick = null
+  for (const t of failingTests(text)) {
+    const seen = (state.tests[testKey(t, cwd)] ??= { count: 0, result: null, shown: false })
+    if (t.result && seen.result && t.result !== seen.result) Object.assign(seen, { count: 0, shown: false })
+    seen.count++
+    if (t.result) seen.result = t.result
+    if (pick || seen.count < 2 || seen.shown) continue
+    const file = projectFile(t.file, cwd)
+    if (!file) continue
+    seen.shown = true // traced or not, not asked again until the result changes
+    if (addedByStep(cwd, relative(cwd, file), t.name)) pick = { file, name: t.name }
+  }
+  return pick
+}
+
+// What a bash result gets in a /dev-implement step: on the 2nd same failure of a test
+// the step added, its trace (pi/test-trace.js); on the 5th failing run, the offer of
+// lib/test-open.sh, the only place the model hears of it. Async: Pi awaits it, so the
+// trace runs before the model reads the result.
+export async function onToolResult(state, event, cwd) {
+  if (!state || event.toolName !== "bash") return undefined
+  const text = (event.content ?? []).map((c) => c.text ?? "").join("")
+  restartCounts(state, text, cwd)
+  if (!failedTestRun(text)) return undefined
+  state.failingRuns = (state.failingRuns ?? 0) + 1
+  const notes = []
+  const pick = toTrace(state, text, cwd)
+  if (pick) {
+    const run = await runTrace(cwd, pick.file, pick.name)
+    const note = run.trace && traceNote(run.trace, relative(cwd, pick.file), pick.name)
+    if (note) notes.push(note)
+  }
+  if (state.failingRuns === OFFER_AT) notes.push(OFFER)
+  if (!notes.length) return undefined
+  return { content: [...event.content, ...notes.map((n) => ({ type: "text", text: `\n\n${n}` }))] }
+}
+
 // What the injections run with, for the model this session has selected.
 export function injectionEnv(model) {
   const env = { DEV_SKILLS_LIB: lib }
@@ -258,14 +320,7 @@ export default function devCommands(pi) {
     cutOffInContext = false
   })
   pi.on?.("tool_call", (event, ctx) => gate(state, event, ctx?.cwd || process.cwd()))
-  // The 5th failing test run of a step: the only place the model hears of test-open.sh.
-  pi.on?.("tool_result", (event) => {
-    if (!state || event.toolName !== "bash") return undefined
-    if (!failedTestRun((event.content ?? []).map((c) => c.text ?? "").join(""))) return undefined
-    state.failingRuns = (state.failingRuns ?? 0) + 1
-    if (state.failingRuns !== OFFER_AT) return undefined
-    return { content: [...event.content, { type: "text", text: `\n\n${OFFER}` }] }
-  })
+  pi.on?.("tool_result", (event, ctx) => onToolResult(state, event, ctx?.cwd || process.cwd()))
   pi.on?.("before_agent_start", () => {
     if (armed) {
       armed = false
@@ -349,7 +404,7 @@ export default function devCommands(pi) {
           const at = stepOf(block)
           if (at) {
             const taskFile = isAbsolute(at.taskFile) ? at.taskFile : join(ctx.cwd, at.taskFile)
-            state = { ...at, taskFile, startHead: git(ctx.cwd, "rev-parse", "HEAD"), refusals: 0, failingRuns: 0 }
+            state = { ...at, taskFile, startHead: git(ctx.cwd, "rev-parse", "HEAD"), refusals: 0, failingRuns: 0, tests: {} }
           }
         }
         armed = true
