@@ -106,3 +106,22 @@ the original tree:
 - **Outside the plan** — files changed that no step's `Create:` or `Modify:` names.
 - **Commits / step branches**, **guard refusals**, **`TEST PASS` lines** — from git and the session logs.
 - **Seconds**, **tokens in/out** — wall time of all steps, and Pi's own token count.
+
+## When the harness is done
+
+The milestone is **3 runs in a row on the same harness code, each with:**
+
+| Column | Bar |
+|---|---|
+| Ticked | 3 — by the harness alone; its one resume per step is allowed |
+| Step 1 / 2 / 3 | 14/14, 7/7, 5/5 |
+| Other failing | 0 — no test of the model's own left failing or open |
+| tsc | clean |
+| Outside the plan | none |
+
+"Same harness code" means no change under `pi/`, `lib/` or `skills/` between the three; a
+change to the docs or to `results.md` doesn't count, a fix does, and the tally starts again.
+Time is recorded, not judged: each step already stops at 30 minutes a session. Past this, the
+judge is a real task, not this one.
+
+**Tally: 1 of 3** — `20261109-175338-pi` on `fe5978d` (¹⁶ in `results.md`).
