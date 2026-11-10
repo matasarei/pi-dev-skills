@@ -16,7 +16,9 @@ script="$root/lib/test-open.sh"
 [ -f "$script" ] || { printf 'no test-open.sh at %s\n' "$script" >&2; exit 1; }
 
 work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT INT TERM
+# A directory outside any repository, for the last case; $work itself becomes one.
+outside="$(mktemp -d)"
+trap 'rm -rf "$work" "$outside"' EXIT INT TERM
 fails=0
 note() { printf 'FAIL  %s\n' "$1"; fails=$((fails + 1)); }
 
@@ -185,7 +187,7 @@ open
 case "$first" in "OPEN REFUSED — no failing test name"*) ;; *) note "no name: '$first'" ;; esac
 
 [ "$(bash "$script" --what 2>/dev/null; echo $?)" = 64 ] || note 'a bad argument was not usage'
-cd / && [ "$(cd "$(mktemp -d)" && bash "$script" | head -1 | cut -c1-12)" = 'OPEN REFUSED' ] || note 'outside a repository it did not refuse'
+cd / && [ "$(cd "$outside" && bash "$script" | head -1 | cut -c1-12)" = 'OPEN REFUSED' ] || note 'outside a repository it did not refuse'
 
 if [ "$fails" -eq 0 ]; then
   printf 'test-open: records what a step added, refuses what was there before\n'
