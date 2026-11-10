@@ -11,12 +11,13 @@
 // its `{`, and each statement is rewritten in place. Only plain-path expect subjects
 // (`mgr.funds`, `success`) are watched, read after every statement in a try/catch,
 // so nothing with side effects runs twice and a name not yet declared is skipped.
-// The scanner skips strings, template text and comments; it doesn't know regex
-// literals, which a test body rarely has at its top level. This isn't an extension.
+// The scanner skips strings, template text, comments and regex literals (by
+// pi/brackets.js's rule for when a slash starts one). This isn't an extension.
 
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { basename, dirname, join, relative } from "node:path"
 import { run } from "./expand.js"
+import { REGEX_BEFORE } from "./brackets.js"
 import { testBlock } from "./failing-test.js"
 import { shellWord } from "./lib-path.js"
 
@@ -73,7 +74,24 @@ function statements(body, firstLine) {
     if (c === '"' || c === "'") {
       i++
       while (i < body.length && body[i] !== c && body[i] !== "\n") i += body[i] === "\\" ? 2 : 1
+      if (body[i] === "\n") { lastCode = i - 1; continue } // unterminated: the newline is still to count
       lastCode = i++
+      continue
+    }
+    // A regex literal, by the rule pi/brackets.js uses: a quote or a bracket inside it is text.
+    if (c === "/" && REGEX_BEFORE.test(body.slice(cur.from, i).slice(-12))) {
+      i++
+      let inClass = false
+      while (i < body.length && body[i] !== "\n") {
+        if (body[i] === "\\") { i += 2; continue }
+        if (body[i] === "[") inClass = true
+        else if (body[i] === "]") inClass = false
+        else if (body[i] === "/" && !inClass) break
+        i++
+      }
+      if (body[i] === "/") i++
+      while (/[a-z]/.test(body[i] ?? "")) i++
+      lastCode = i - 1
       continue
     }
     if (c === "`") {

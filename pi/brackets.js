@@ -20,7 +20,8 @@ import { shellWord } from "./lib-path.js"
 const MAX_BYTES = 2_000_000
 const MAX_HINTS = 3
 // A slash after one of these starts a regex literal; after anything else it divides.
-const REGEX_BEFORE = /(^|[(,=:[!&|?{};+\-*%<>~^]|\b(return|typeof|case|do|else|in|of|new|delete|void|throw|yield|await))\s*$/
+// pi/test-trace.js uses it too, to step over a regex in a test body.
+export const REGEX_BEFORE = /(^|[(,=:[!&|?{};+\-*%<>~^]|\b(return|typeof|case|do|else|in|of|new|delete|void|throw|yield|await))\s*$/
 const PAIR = { ")": "(", "]": "[", "}": "{" }
 
 function scan(s, place) {

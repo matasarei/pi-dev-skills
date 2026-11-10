@@ -64,7 +64,10 @@ const tests = []
 export const describe = (_n, fn) => fn()
 export const it = (name, fn) => tests.push({ name, fn })
 it.only = (name, fn) => tests.push({ name, fn, only: true })
-export const expect = (v) => ({ toBe: (w) => { if (!Object.is(v, w)) { const e = new Error("expected " + v + " to be " + w); e.name = "AssertionError"; throw e } } })
+export const expect = (v) => ({
+  toBe: (w) => { if (!Object.is(v, w)) { const e = new Error("expected " + v + " to be " + w); e.name = "AssertionError"; throw e } },
+  toThrow: (re) => { try { v() } catch (err) { if (re.test(err.message)) return } const e = new Error("expected to throw " + re); e.name = "AssertionError"; throw e },
+})
 process.on("beforeExit", () => {
   const run = tests.some((t) => t.only) ? tests.filter((t) => t.only) : tests
   for (const t of run) { try { t.fn(); console.log(" ✓ " + t.name) } catch (e) { console.log(" FAIL  a.test.mjs > " + t.name); console.log(e.name + ": " + e.message) } }
@@ -134,6 +137,14 @@ const run = (text, name) => {
   if (!r || !same(r.i.watched, ["y"])) fails.push(`late watched: ${JSON.stringify(r?.i.watched)}`)
   const note = r && traceNote(r.trace, "src/a.test.mjs", "late")
   if (!note?.includes("3| let n = 1   → n = 1\n4| n += 1   returned 2\n5| const y = n * 2   → y = 4")) fails.push(`late note: ${note}`)
+}
+{
+  // A regex literal holding a quote or a bracket is one token: the statements around it keep their lines.
+  const text = 'import { describe, it, expect } from "./harness.mjs"\nit("regex", () => {\n  const f = () => { throw new Error("can\'t (x") }\n  expect(f).toThrow(/can\'t \\(x/)\n  const n = 1\n  expect(n).toBe(2)\n})\n'
+  const r = run(text, "regex")
+  if (!r || !same(r.i.rows.map((x) => [x.line, x.kind]), [[3, "decl"], [4, "expect"], [5, "decl"], [6, "expect"]])) fails.push(`regex rows: ${JSON.stringify(r?.i.rows)}`)
+  const note = r && traceNote(r.trace, "src/a.test.mjs", "regex")
+  if (!note?.includes("4| expect(f).toThrow(/can't \\(x/)   passes\n5| const n = 1   → f = [Function], n = 1\n6| expect(n).toBe(2)   fails: expected 1 to be 2")) fails.push(`regex note: ${note}`)
 }
 {
   // A declaration over two lines is one statement: traced once, after its last line, and shown from its first.
