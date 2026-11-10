@@ -276,7 +276,7 @@ answer = (res) => {
 r = await runReplay([file, "1", "--limit", "1"])
 expect("the limit: not exit 2", r.code === 2 && r.line.finish === "limit" && r.line.textChars === 8, r)
 expect("the limit: the files", read(r.dir, "text.txt") === "Reading ", "no text.txt")
-expect("the tool uses fetch, with undici's 300 s body timeout", !readFileSync(tool, "utf8").match(/\bfetch\(/), "fetch(")
+expect("the tool must not use fetch, whose undici body timeout is 300 s", !readFileSync(tool, "utf8").match(/\bfetch\(/), "fetch(")
 await refuses("--limit with no value", [file, "1", "--limit"], "usage")
 await refuses("--limit that isn't a number", [file, "1", "--limit", "soon"], "usage")
 await refuses("--limit of nothing", [file, "1", "--limit", "0"], "usage")
@@ -313,6 +313,40 @@ answer = null
 setModels({ providers: { mock: { baseUrl: "http://127.0.0.1:9/v1", models: [model] } } })
 r = await runReplay([file, "1"])
 expect("a closed port: not exit 1", r.code === 1 && r.stderr.includes("request failed"), r)
+expect("a closed port: the refusal doesn't name the folder it left", r.dir && r.stderr.includes(r.dir.split("/").pop()), { stderr: r.stderr, dir: r.dir })
+
+// A baseUrl with a trailing slash still posts to …/v1/chat/completions.
+setModels({ providers: { mock: { baseUrl: `${baseUrl}/`, api: "openai-completions", apiKey: "x", models: [model] } } })
+requests = []
+r = await runReplay([file, "1"])
+expect("a trailing slash: posted somewhere else", r.code === 0 && requests.at(-1)?.url === "/v1/chat/completions", { code: r.code, url: requests.at(-1)?.url })
+setModels(models())
+
+// A server that frames its events with CRLF, as some proxies do.
+answer = (res) => {
+  stream(res)
+  res.write(chunk({ role: "assistant", content: "crlf" }).replace(/\n\n$/, "\r\n\r\n"))
+  res.write(chunk({}, "stop").replace(/\n\n$/, "\r\n\r\n"))
+  res.end("data: [DONE]\r\n\r\n")
+}
+r = await runReplay([file, "1"])
+expect("CRLF framing: not read", r.code === 0 && r.line.finish === "stop" && read(r.dir, "text.txt") === "crlf", { code: r.code, line: r.line })
+
+// A tool-call delta with no index: one call, as index 0.
+answer = (res) => {
+  stream(res)
+  res.write(chunk({ role: "assistant", tool_calls: [{ id: "c1", type: "function", function: { name: "read", arguments: '{"path":"x"}' } }] }))
+  finished(res, "tool_calls")
+}
+r = await runReplay([file, "1"])
+// A message_end with no message in the log is skipped, as a cut-off line is.
+{
+  const bare = log([...events.slice(0, 3), { type: "message_end" }, ...events.slice(3)], "bare.jsonl")
+  const listed = await replay([bare])
+  expect("a message_end with no message: not skipped", listed.code === 0 && !listed.stderr.includes("TypeError"), listed)
+}
+expect("a call with no index: lost", r.line.tool === "read" && read(r.dir, "args.txt") === '{"path":"x"}\n', { line: r.line })
+answer = null
 
 // On LM Studio it checks the model is loaded at its window, as run.sh does.
 const lmHome = `${work}/home`
