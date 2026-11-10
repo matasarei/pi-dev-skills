@@ -93,6 +93,8 @@ limit_in() { awk '/prism-ml\/bonsai-27b/ { found = 1 } found && /"maxTokens"/ { 
 shown="$(limit_in "$readme")"
 copied="$(limit_in "$root/models.example.json")"
 [ -n "$shown" ] && [ "$shown" = "$copied" ] || note "README shows maxTokens ${shown:-nothing} for bonsai-27b, models.example.json has ${copied:-nothing}"
+# And the prose that explains it names the same limit, in thousands.
+[ -n "$copied" ] && grep -q "Why $((copied / 1024))k output" "$readme" || note "README's 'Why …k output' doesn't match maxTokens ${copied:-nothing} in models.example.json"
 
 if [ "$fails" -eq 0 ]; then
   printf 'readme: describes every mechanic the skills rely on\n'
