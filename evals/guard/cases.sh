@@ -104,6 +104,23 @@ cat > "$work/cases.txt" <<'TABLE'
 0|rm -rf /work/app/node_modules_backup
 0|find . -name "*.log" -delete
 0|find . -name node_modules -prune -o -name "*.ts" -print
+# refused — sed in place: a pattern over the whole file, and BSD sed on macOS
+# reads the word after -i as a backup suffix. The model is pointed to edit.
+2:with edit|sed -i 's/a/b/' src/x.ts
+2:with edit|sed -i '' 's/a/b/' src/x.ts
+2:with edit|sed -i.bak 's/a/b/' src/x.ts
+2:with edit|sed -ni '1,5p' src/x.ts
+2:with edit|sed -E -i 's/a+/b/' src/x.ts
+2:with edit|sed --in-place 's/a/b/' src/x.ts
+2:with edit|cd /tmp/p && sed -i 's/;$//' src/__tests__/x.test.ts
+2:with edit|sudo sed -i 's/a/b/' f
+# …and sed that only reads, or sed -i that isn't the command, is not
+0|sed -n '1,5p' src/x.ts
+0|sed 's/a/b/' src/x.ts > out.ts
+0|sed -e 's/-i/x/' f
+0|grep sed -i notes.txt
+0|echo "sed -i"
+0|docker run --rm -v "$PWD":/app -w /app node:lts-alpine sh -c 'sed -i s/a/b/ f'
 TABLE
 
 # A project whose profile runs everything in a container (exec.kind image): its
@@ -213,6 +230,14 @@ for (const line of readFileSync(casesPath, "utf8").split("\n")) {
   if (got !== want) fail(`want=${want} got=${got}  ${cmd}${reason ? "  (" + reason + ")" : ""}`)
   else if (mustSay && !reason.includes(mustSay)) fail(`the reason does not say '${mustSay}': ${cmd}  (${reason})`)
   if (reason.includes("DEV_SKILLS_LIB")) fail(`the reason names $DEV_SKILLS_LIB, not the path: ${cmd}  (${reason})`)
+}
+// The in-place sed refusal names BSD sed's suffix rule on macOS, and only there.
+if (label === "no-profile") {
+  const bsd = mod.inPlaceSedReason?.("sed -i 's/a/b/' f", "darwin") ?? ""
+  const gnu = mod.inPlaceSedReason?.("sed -i 's/a/b/' f", "linux") ?? ""
+  if (!bsd.includes("BSD") || !bsd.includes("with edit")) fail(`on darwin the sed -i reason does not name BSD sed and edit: ${bsd}`)
+  if (gnu.includes("BSD") || !gnu.includes("with edit")) fail(`on linux the sed -i reason names BSD sed, or not edit: ${gnu}`)
+  if (mod.inPlaceSedReason?.("sed -n '1,5p' f", "darwin") !== null) fail("sed -n has an in-place reason")
 }
 // Another tool's arguments are never read: an edit whose text mentions a push is not a push.
 if ((await verdict("edit", { command: "git push --force" }))[0] !== "0") fail("a non-bash tool was refused")

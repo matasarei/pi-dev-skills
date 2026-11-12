@@ -234,6 +234,20 @@ export function reasonToRefuseRun(command, profile) {
   return null
 }
 
+// The reason to refuse sed in place, or null. In the bench every `sed -i` was an
+// edit-sized change written as a pattern over the whole file, and on macOS each one
+// failed: BSD sed reads the word after -i as a backup suffix, then the file's name as
+// the script. Made to work, some would have changed every `});` in a test file.
+// Only sed as the command itself: inside quotes (sh -c '…') or after another command
+// (grep sed -i) it isn't run here.
+const IN_PLACE = /^(-[a-zA-Z]*i|--in-place(=|$))/
+export function inPlaceSedReason(command, platform = process.platform) {
+  if (typeof command !== "string") return null
+  if (!segments(command).some((seg) => { const w = seg.split(" "); return w[0] === "sed" && w.slice(1).some((x) => IN_PLACE.test(x)) })) return null
+  const bsd = platform === "darwin" ? ", and this host's sed is BSD sed, which reads the word after -i as a backup suffix" : ""
+  return `sed -i rewrites every line its pattern matches${bsd}. Make the change with edit: read or grep -n the lines first, and put only those lines in oldText.`
+}
+
 // Sanitizes grep regex patterns from local models.
 // Local models frequently search for namespaces, Windows paths, or strings containing backslashes
 // (e.g. "App\Models\User" or "C:\Path\To\File") without double-escaping for ripgrep's Rust regex engine.
@@ -498,7 +512,8 @@ export function check(event, cwd, loop) {
   // 8. Refuse forbidden bash operations
   if (tool !== "bash") return undefined
   const reason = reasonToRefuse(input.command, baseBranches(cwd), currentBranch(cwd)) ??
-    reasonToRefuseRun(input.command, readProfile(cwd))
+    reasonToRefuseRun(input.command, readProfile(cwd)) ??
+    inPlaceSedReason(input.command)
   return reason ? refuse(reason) : undefined
 }
 
