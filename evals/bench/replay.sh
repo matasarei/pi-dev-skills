@@ -339,14 +339,15 @@ answer = (res) => {
   finished(res, "tool_calls")
 }
 r = await runReplay([file, "1"])
+expect("a call with no index: lost", r.line.tool === "read" && read(r.dir, "args.txt") === '{"path":"x"}\n', { line: r.line })
+answer = null
+
 // A message_end with no message in the log is skipped, as a cut-off line is.
 {
   const bare = log([...events.slice(0, 3), { type: "message_end" }, ...events.slice(3)], "bare.jsonl")
   const listed = await replay([bare])
   expect("a message_end with no message: not skipped", listed.code === 0 && !listed.stderr.includes("TypeError"), listed)
 }
-expect("a call with no index: lost", r.line.tool === "read" && read(r.dir, "args.txt") === '{"path":"x"}\n', { line: r.line })
-answer = null
 
 // On LM Studio it checks the model is loaded at its window, as run.sh does.
 const lmHome = `${work}/home`
