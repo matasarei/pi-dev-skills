@@ -31,6 +31,7 @@
 # and a run started from agent_settled really runs.
 #
 # A test run that reports a block left open: the model sees which, in that result.
+# An edit that misses: where its oldText stops matching. tsc's errors: the lines named.
 #
 # A write of what the file already holds: the hook sees the content, the model sees
 # the refusal instead of Pi's "Successfully wrote", and the third one ends the run.
@@ -381,6 +382,17 @@ calls.syntax = ["bash", { command: "printf '/app/src/city.test.ts:355:0: ERROR: 
 ;[r] = await session(["syntax", "text"])
 const syntaxResult = JSON.stringify((bodies.at(-1)?.messages ?? []).filter((m) => m.role === "tool").at(-1)?.content ?? "")
 expect("the model did not see where the block is left open", syntaxResult.includes("Unexpected end of file") && syntaxResult.includes("src/city.test.ts has a block that never closes: line 66") && syntaxResult.includes("just before line 147"), syntaxResult)
+
+// An edit whose oldText stops matching after its first line: the model sees which line
+// and what the file has there, in Pi's own error. And tsc's errors: the lines it names.
+writeFileSync(`${proj}/src/m.ts`, "export function f() {\n    const a = 1;\n    return a;\n}\n")
+calls.missed = ["edit", { path: "src/m.ts", oldText: "    const a = 1;\n    return b;", newText: "    const a = 2;\n    return b;" }]
+calls.tsc = ["bash", { command: "printf 'src/m.ts(2,11): error TS6133: a is declared but its value is never read.\\n'; exit 2" }]
+;[r] = await session(["missed", "tsc", "text"])
+const [missResult, tscResult] = (bodies.at(-1)?.messages ?? []).filter((m) => m.role === "tool").slice(-2).map((m) => JSON.stringify(m.content))
+expect("the missed edit did not say where oldText stops matching", missResult?.includes("Could not find") && missResult.includes("oldText line 1 matches line 2 of src/m.ts; its line 2 `    return b;` is not what follows: line 3 is `    return a;`"), missResult)
+expect("the missed edit changed the file", readFileSync(`${proj}/src/m.ts`, "utf8").includes("const a = 1;"), "changed")
+expect("tsc's result did not show the line it names", tscResult?.includes("error TS6133") && tscResult.includes("src/m.ts:2 `    const a = 1;`"), tscResult)
 
 server.close()
 for (const f of fails) console.log(`FAIL  ${f}`)

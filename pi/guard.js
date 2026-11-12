@@ -30,7 +30,14 @@
 //
 // After a bash call that reports a syntax error in a JS/TS file under cwd, it adds
 // one line to the result: which block never closes and where its close belongs
-// (pi/brackets.js). The test output alone names only the file's last line.
+// (pi/brackets.js). The test output alone names only the file's last line. After tsc
+// errors, it adds each line tsc names as the file holds it now (pi/tsc-lines.js), and
+// after an edit Pi couldn't find, which of oldText's lines matched where and the first
+// that didn't (pi/edit-miss.js): Pi says only that the text wasn't found.
+//
+// It refuses sed in place (sed -i): in the bench each one was an edit-sized change
+// written as a pattern over the whole file, and on macOS each failed on BSD sed's
+// backup suffix. The refusal points to edit.
 //
 // Quoted text is blanked first, so a commit message may mention a flag.
 // Everything else runs — gh pr create and gh pr ready included, which /dev-pr
@@ -46,6 +53,8 @@ import { existsSync, statSync, readFileSync } from "node:fs"
 import { join, dirname, resolve } from "node:path"
 import { LIB, shellWord } from "./lib-path.js"
 import { syntaxHint } from "./brackets.js"
+import { editMissHint } from "./edit-miss.js"
+import { tscLines } from "./tsc-lines.js"
 
 const SEG = "[^|;&]*" // the rest of one command in a pipeline or chain
 const REFUSES = "dev-guard refuses: "
@@ -529,9 +538,13 @@ export default function devGuard(pi) {
   pi.on("tool_execution_start", (event) => { loop.started.set(event.toolCallId, { tool: event.toolName, args: event.args }) })
   pi.on("tool_execution_end", (event, ctx) => checkRejected(event, ctx, loop))
   pi.on("tool_result", (event, ctx) => {
-    if (event?.toolName !== "bash") return undefined
-    const content = event.content ?? []
-    const hint = syntaxHint(content.map((c) => c.text ?? "").join(""), ctx?.cwd || process.cwd())
-    return hint ? { content: [...content, { type: "text", text: `\n\n${hint}` }] } : undefined
+    const content = event?.content ?? []
+    const text = content.map((c) => c.text ?? "").join("")
+    const cwd = ctx?.cwd || process.cwd()
+    let hints = []
+    if (event?.toolName === "bash") hints = [syntaxHint(text, cwd), tscLines(text, cwd)]
+    else if (event?.toolName === "edit" && event.isError) hints = [editMissHint(event.input, text, cwd)]
+    hints = hints.filter(Boolean)
+    return hints.length ? { content: [...content, ...hints.map((h) => ({ type: "text", text: `\n\n${h}` }))] } : undefined
   })
 }
