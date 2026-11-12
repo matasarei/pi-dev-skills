@@ -59,8 +59,13 @@ try {
   const b = tscLines("src/a.ts(2,14): error TS1003: Identifier expected.\n", cwd) ?? ""
   if (!b.includes("src/a.ts:2 `export const 'b' = 1;`")) fails.push(`a backtick in the line: ${JSON.stringify(b)}`)
 
+  // A library's declaration file is no line the model should edit.
+  mkdirSync(join(cwd, "node_modules/lib"), { recursive: true })
+  writeFileSync(join(cwd, "node_modules/lib/index.d.ts"), "export declare const x: number;\n")
+
   // Nothing to add.
   const none = [
+    ["a library's .d.ts", "node_modules/lib/index.d.ts(1,23): error TS2304: Cannot find name 'y'.\n"],
     ["no tsc error", "Tests  3 passed (3)\n"],
     ["a file outside cwd", "/elsewhere/x.ts(1,1): error TS2322: no.\n"],
     ["a line past the file's end", "src/a.ts(900,1): error TS2322: no.\n"],

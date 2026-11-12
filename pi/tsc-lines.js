@@ -43,6 +43,8 @@ export function tscLines(output, cwd) {
     const line = raw.trim()
     const m = PLAIN.exec(line) ?? PRETTY.exec(line)
     if (!m) continue
+    // A library's declaration file is no line to edit.
+    if (/(^|\/)node_modules\//.test(m[1])) continue
     const full = projectFile(m[1], cwd)
     const n = Number(m[2])
     const key = `${full}:${n}`
