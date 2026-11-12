@@ -79,6 +79,8 @@ function statements(body, firstLine) {
       continue
     }
     // A regex literal, by the rule pi/brackets.js uses: a quote or a bracket inside it is text.
+    // Known miss, shared with that rule: a division right after `x++` or `x--` reads as a
+    // regex to the end of the line, so `i++ / 2; const a = 1` traces as one row, not two.
     if (c === "/" && REGEX_BEFORE.test(body.slice(cur.from, i).slice(-12))) {
       i++
       let inClass = false
