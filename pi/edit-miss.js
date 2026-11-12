@@ -61,7 +61,8 @@ export function editMissHint(input, resultText, cwd) {
   }
   const lines = text.replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n")
   const name = relative(cwd, full)
-  const edits = Array.isArray(input.edits) ? input.edits : [{ oldText: input.oldText }]
+  // As Pi's shim builds them (core/tools/edit.js): edits[], then a flat oldText last.
+  const edits = [...(Array.isArray(input.edits) ? input.edits : []), ...(typeof input.oldText === "string" ? [{ oldText: input.oldText }] : [])]
   // Pi names the one edit it couldn't find when there are several.
   const which = m[1] !== undefined ? [Number(m[1])] : edits.map((_, k) => k)
   const notes = []

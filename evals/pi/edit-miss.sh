@@ -78,6 +78,11 @@ try {
   const m = editMissHint(multi, `Could not find edits[1] in ${a}. The oldText must match exactly including all whitespace and newlines.`, cwd) ?? ""
   if (!m.includes("edits[1]: oldText line 1 `const c = 3;` is not in a.ts")) fails.push(`edits[1]: ${JSON.stringify(m)}`)
 
+  // Both shapes in one call: Pi adds the flat oldText after edits[], as the last edit.
+  const both = { path: a, edits: [{ oldText: "const a = 1;", newText: "" }], oldText: "const c = 3;", newText: "" }
+  const bm = editMissHint(both, `Could not find edits[1] in ${a}. The oldText must match exactly including all whitespace and newlines.`, cwd) ?? ""
+  if (!bm.includes("edits[1]: oldText line 1 `const c = 3;` is not in a.ts")) fails.push(`edits[] and a flat oldText: ${JSON.stringify(bm)}`)
+
   // Nothing to add.
   const none = [
     ["a result that isn't Pi's miss", { path: a, edits: [{ oldText: "zzz", newText: "" }] }, "Successfully replaced 1 block(s) in a.ts."],
