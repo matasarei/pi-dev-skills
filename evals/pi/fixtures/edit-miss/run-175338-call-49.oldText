@@ -1,0 +1,58 @@
+    it('placeZone that fails for overlap does not charge', () => {
+        const manager = new CityManager(20, 20, false);
+        // Clear the auto-spawned LandingBase first (costs 0)
+        const base = manager.zones.find(z => z.type === ZoneType.LandingBase);
+        if (base) manager.clearZone(base.centerX, base.centerY);
+
+        const startFunds = manager.funds;
+        manager.placeZone(5, 5, ZoneType.Residential); // costs 100
+        const fundsAfterFirst = manager.funds;
+
+        const success = manager.placeZone(6, 6, ZoneType.Commercial); // costs 150, overlaps
+        expect(success).toBe(false);
+        expect(manager.funds).toBe(fundsAfterFirst); // unchanged despite insufficient funds too
+    });
+
+    it('placeZone that fails for crater does not charge', () => {
+        const manager = new CityManager(20, 20, false);
+
+        const startFunds = manager.funds;
+        // Make a crater at the placement site
+        const cell = manager.grid.getCell(5, 5);
+        if (cell) cell.terrain = TerrainType.Crater;
+
+        const success = manager.placeZone(5, 5, ZoneType.Residential); // costs 100
+        expect(success).toBe(false);
+        expect(manager.funds).toBe(startFunds); // unchanged
+    });
+
+    it('placeZone subtracts the cost when it succeeds', () => {
+        const manager = new CityManager(20, 20, false);
+        // Clear the auto-spawned LandingBase first (costs 0)
+        const base = manager.zones.find(z => z.type === ZoneType.LandingBase);
+        if (base) manager.clearZone(base.centerX, base.centerY);
+
+        const startFunds = manager.funds;
+        manager.placeZone(5, 5, ZoneType.Residential); // costs 100
+        expect(manager.funds).toBe(startFunds - 100);
+    });
+
+    it('new CityManager(20, 20, false).funds is 2000', () => {
+        const manager = new CityManager(20, 20, false);
+        // Clear the auto-spawned LandingBase first (costs 0)
+        const base = manager.zones.find(z => z.type === ZoneType.LandingBase);
+        if (base) manager.clearZone(base.centerX, base.centerY);
+
+        const startFunds = manager.funds;
+        expect(manager.funds).toBe(2000);
+    });
+
+    it('new CityManager(20, 20, false, 500).funds is 500', () => {
+        const manager = new CityManager(20, 20, false, 500);
+        // Clear the auto-spawned LandingBase first (costs 0)
+        const base = manager.zones.find(z => z.type === ZoneType.LandingBase);
+        if (base) manager.clearZone(base.centerX, base.centerY);
+
+        const startFunds = manager.funds;
+        expect(manager.funds).toBe(500);
+    });
