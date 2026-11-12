@@ -30,7 +30,14 @@
 //
 // After a bash call that reports a syntax error in a JS/TS file under cwd, it adds
 // one line to the result: which block never closes and where its close belongs
-// (pi/brackets.js). The test output alone names only the file's last line.
+// (pi/brackets.js). The test output alone names only the file's last line. After tsc
+// errors, it adds each line tsc names as the file holds it now (pi/tsc-lines.js), and
+// after an edit Pi couldn't find, which of oldText's lines matched where and the first
+// that didn't (pi/edit-miss.js): Pi says only that the text wasn't found.
+//
+// It refuses sed in place (sed -i): in the bench each one was an edit-sized change
+// written as a pattern over the whole file, and on macOS each failed on BSD sed's
+// backup suffix. The refusal points to edit.
 //
 // Quoted text is blanked first, so a commit message may mention a flag.
 // Everything else runs — gh pr create and gh pr ready included, which /dev-pr
@@ -46,6 +53,8 @@ import { existsSync, statSync, readFileSync } from "node:fs"
 import { join, dirname, resolve } from "node:path"
 import { LIB, shellWord } from "./lib-path.js"
 import { syntaxHint } from "./brackets.js"
+import { editMissHint } from "./edit-miss.js"
+import { tscLines } from "./tsc-lines.js"
 
 const SEG = "[^|;&]*" // the rest of one command in a pipeline or chain
 const REFUSES = "dev-guard refuses: "
@@ -232,6 +241,20 @@ export function reasonToRefuseRun(command, profile) {
     return `${where} Run the tests with bash ${shellWord(LIB)}/test.sh (--scoped <name> for one file), or run the command after the profile's prefix: ${prefix} <command>`
   }
   return null
+}
+
+// The reason to refuse sed in place, or null. In the bench every `sed -i` was an
+// edit-sized change written as a pattern over the whole file, and on macOS each one
+// failed: BSD sed reads the word after -i as a backup suffix, then the file's name as
+// the script. Made to work, some would have changed every `});` in a test file.
+// Only sed as the command itself: inside quotes (sh -c '…') or after another command
+// (grep sed -i) it isn't run here.
+const IN_PLACE = /^(-[a-zA-Z]*i|--in-place(=|$))/
+export function inPlaceSedReason(command, platform = process.platform) {
+  if (typeof command !== "string") return null
+  if (!segments(command).some((seg) => { const w = seg.split(" "); return w[0] === "sed" && w.slice(1).some((x) => IN_PLACE.test(x)) })) return null
+  const bsd = platform === "darwin" ? ", and this host's sed is BSD sed, which reads the word after -i as a backup suffix" : ""
+  return `sed -i rewrites every line its pattern matches${bsd}. Make the change with edit: read or grep -n the lines first, and put only those lines in oldText.`
 }
 
 // Sanitizes grep regex patterns from local models.
@@ -498,7 +521,8 @@ export function check(event, cwd, loop) {
   // 8. Refuse forbidden bash operations
   if (tool !== "bash") return undefined
   const reason = reasonToRefuse(input.command, baseBranches(cwd), currentBranch(cwd)) ??
-    reasonToRefuseRun(input.command, readProfile(cwd))
+    reasonToRefuseRun(input.command, readProfile(cwd)) ??
+    inPlaceSedReason(input.command)
   return reason ? refuse(reason) : undefined
 }
 
@@ -514,9 +538,14 @@ export default function devGuard(pi) {
   pi.on("tool_execution_start", (event) => { loop.started.set(event.toolCallId, { tool: event.toolName, args: event.args }) })
   pi.on("tool_execution_end", (event, ctx) => checkRejected(event, ctx, loop))
   pi.on("tool_result", (event, ctx) => {
-    if (event?.toolName !== "bash") return undefined
-    const content = event.content ?? []
-    const hint = syntaxHint(content.map((c) => c.text ?? "").join(""), ctx?.cwd || process.cwd())
-    return hint ? { content: [...content, { type: "text", text: `\n\n${hint}` }] } : undefined
+    const content = event?.content ?? []
+    const text = content.map((c) => c.text ?? "").join("")
+    const cwd = ctx?.cwd || process.cwd()
+    let hints = []
+    // Both return before reading any file unless the output has their error words.
+    if (event?.toolName === "bash") hints = [syntaxHint(text, cwd), tscLines(text, cwd)]
+    else if (event?.toolName === "edit" && event.isError) hints = [editMissHint(event.input, text, cwd)]
+    hints = hints.filter(Boolean)
+    return hints.length ? { content: [...content, ...hints.map((h) => ({ type: "text", text: `\n\n${h}` }))] } : undefined
   })
 }
