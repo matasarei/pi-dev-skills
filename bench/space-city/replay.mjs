@@ -70,7 +70,7 @@ function readLog(file) {
     if (!line) continue
     let e
     try { e = JSON.parse(line) } catch { continue } // A run cut off mid-line.
-    if (e.type === "message_end") {
+    if (e.type === "message_end" && e.message) { // one with no message is skipped, as a cut-off line is
       if (e.message.role === "system") system = e.message
       else if (e.message.role === "assistant") {
         replies.push({ message: e.message, context: [...context] })
@@ -229,19 +229,20 @@ function send(baseUrl, body, { dir, loggedText, limit }) {
     if (choice.finish_reason) finish = choice.finish_reason
     if (choice.delta?.content) text += choice.delta.content
     for (const call of choice.delta?.tool_calls ?? []) {
-      calls[call.index] ??= { name: "", args: "" }
-      if (call.function?.name) calls[call.index].name = call.function.name
-      if (call.function?.arguments) calls[call.index].args += call.function.arguments
+      const at = call.index ?? 0 // a server that sends one call may leave index out
+      calls[at] ??= { name: "", args: "" }
+      if (call.function?.name) calls[at].name = call.function.name
+      if (call.function?.arguments) calls[at].args += call.function.arguments
     }
   }
 
   const ended = () => (finish ? report(finish, 0) : report("dropped", 1, "the stream closed before it finished"))
-  const req = request(`${baseUrl}/chat/completions`, { method: "POST", headers: { "content-type": "application/json" } }, (res) => {
+  const req = request(`${baseUrl.replace(/\/+$/, "")}/chat/completions`, { method: "POST", headers: { "content-type": "application/json" } }, (res) => {
     if (res.statusCode !== 200) {
       let answer = ""
       res.on("data", (d) => { answer += d })
       res.on("error", () => {}) // A dropped answer: close still says what came.
-      res.on("close", () => refuse(`the server answered ${res.statusCode}: ${answer.slice(0, 300)}`))
+      res.on("close", () => refuse(`the server answered ${res.statusCode}: ${answer.slice(0, 300)} (request.json is in ${dir})`))
       return
     }
     res.setEncoding("utf8") // A multibyte character can straddle two chunks.
@@ -253,16 +254,19 @@ function send(baseUrl, body, { dir, loggedText, limit }) {
       appendFileSync(join(dir, "stream.log"), `${now - start} ${d}`)
       pending += d
       let end
-      while ((end = pending.indexOf("\n\n")) >= 0) {
+      // Events end at a blank line, LF or CRLF.
+      let gap
+      while ((gap = /\r?\n\r?\n/.exec(pending))) {
+        end = gap.index
         const block = pending.slice(0, end)
-        pending = pending.slice(end + 2)
+        pending = pending.slice(end + gap[0].length)
         if (block.startsWith("data: ")) onEvent(block.slice(6))
       }
     })
     res.on("error", () => {}) // A dropped stream: close says so.
     res.on("close", ended)
   })
-  req.on("error", (e) => (lastByte === null ? refuse(`request failed: ${e.message}`) : ended()))
+  req.on("error", (e) => (lastByte === null ? refuse(`request failed: ${e.message} (request.json is in ${dir})`) : ended()))
   req.end(JSON.stringify(body))
   setTimeout(() => report("limit", 2, `stopped at the ${limit} s limit`), limit * 1000)
 }

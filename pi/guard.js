@@ -21,8 +21,9 @@
 // most — an unescaped backslash in a grep pattern, a file passed to find as its
 // directory, a timeout in milliseconds where Pi wants seconds, line endings
 // that differ from the file — refuses to read a directory, and breaks a loop of
-// tool calls: three identical in a row, a short cycle of them, or a write of what
-// the file already holds. The third such repeat within 40 calls ends the run. Calls
+// tool calls: three identical in a row or a short cycle of them. A write of what the
+// file already holds is refused the first time. The third of any of these within 40
+// calls ends the run. Calls
 // that fail Pi's validation count too, though they never reach this hook:
 // checkRejected sees them after the fact. Repairs change event.input in place, which
 // Pi runs.
@@ -383,6 +384,9 @@ export function check(event, cwd, loop) {
   const refuse = (reason) => ({ block: true, reason: REFUSES + reason })
   const callHistory = loop.calls
   loop.count++
+  // Pi ends the run only when every result in a batch sets terminate
+  // (pi-agent-core agent-loop.js, shouldTerminateToolBatch), so a looping call made in
+  // parallel with a different one gets through that batch; it's caught on the next.
   const refuseRepeat = (reason) => {
     if (!countRepeat(loop)) return refuse(reason)
     return { ...refuse(`${reason} This run stops here.`), terminate: true }

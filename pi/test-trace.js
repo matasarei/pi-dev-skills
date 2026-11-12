@@ -11,12 +11,13 @@
 // its `{`, and each statement is rewritten in place. Only plain-path expect subjects
 // (`mgr.funds`, `success`) are watched, read after every statement in a try/catch,
 // so nothing with side effects runs twice and a name not yet declared is skipped.
-// The scanner skips strings, template text and comments; it doesn't know regex
-// literals, which a test body rarely has at its top level. This isn't an extension.
+// The scanner skips strings, template text, comments and regex literals (by
+// pi/brackets.js's rule for when a slash starts one). This isn't an extension.
 
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { basename, dirname, join, relative } from "node:path"
 import { run } from "./expand.js"
+import { REGEX_BEFORE } from "./brackets.js"
 import { testBlock } from "./failing-test.js"
 import { shellWord } from "./lib-path.js"
 
@@ -73,7 +74,26 @@ function statements(body, firstLine) {
     if (c === '"' || c === "'") {
       i++
       while (i < body.length && body[i] !== c && body[i] !== "\n") i += body[i] === "\\" ? 2 : 1
+      if (body[i] === "\n") { lastCode = i - 1; continue } // unterminated: the newline is still to count
       lastCode = i++
+      continue
+    }
+    // A regex literal, by the rule pi/brackets.js uses: a quote or a bracket inside it is text.
+    // Known miss, shared with that rule: a division right after `x++` or `x--` reads as a
+    // regex to the end of the line, so `i++ / 2; const a = 1` traces as one row, not two.
+    if (c === "/" && REGEX_BEFORE.test(body.slice(cur.from, i).slice(-12))) {
+      i++
+      let inClass = false
+      while (i < body.length && body[i] !== "\n") {
+        if (body[i] === "\\") { i += 2; continue }
+        if (body[i] === "[") inClass = true
+        else if (body[i] === "]") inClass = false
+        else if (body[i] === "/" && !inClass) break
+        i++
+      }
+      if (body[i] === "/") i++
+      while (/[a-z]/.test(body[i] ?? "")) i++
+      lastCode = i - 1
       continue
     }
     if (c === "`") {
@@ -129,15 +149,19 @@ export function instrument(text, name) {
   const watched = []
   let rewritten = ""
   let at = 0
-  for (const s of stmts) {
+  stmts.forEach((s, k) => {
     const decl = DECL.exec(s.text)
     let kind = "expr"
     if (EXPECT.test(s.text)) kind = "expect"
     else if (decl) kind = "decl"
     else if (KEYWORD.test(s.text) || /^(?:const|let|var)\b/.test(s.text)) kind = "other"
-    // Shown as written, trailing comment and all (`// 100` says what the test meant).
-    const shown = lines[s.start - 1].trim()
-    const row = { line: s.start, kind, text: s.end > s.start ? `${shown} …` : shown }
+    // Shown as written, trailing comment and all (`// 100` says what the test meant). On
+    // a line shared with another statement, only this one's part of it.
+    const next = stmts[k + 1]
+    const shared = stmts.some((o) => o !== s && (o.start === s.start || o.end === s.start))
+    const lineEnd = body.indexOf("\n", s.from) < 0 ? body.length : body.indexOf("\n", s.from)
+    const shown = shared ? body.slice(s.from, next && next.from < lineEnd ? next.from : lineEnd).trim() : lines[s.start - 1].trim()
+    const row = { row: k, line: s.start, kind, text: s.end > s.start ? `${shown} …` : shown }
     if (kind === "decl") row.id = decl[1]
     rows.push(row)
     if (kind === "expect") {
@@ -146,19 +170,20 @@ export function instrument(text, name) {
     }
     const semi = s.text.endsWith(";") ? "" : ";"
     let out
-    if (kind === "expect") out = `__devTrace(${s.start}); ${s.text}${semi} __devPass(${s.start});`
-    else if (kind === "decl") out = `${s.text}${semi} __devTrace(${s.start}, ${row.id});`
-    else if (kind === "other") out = `${s.text} ;__devTrace(${s.start});`
-    else out = `__devTrace(${s.start}, (${s.text.replace(/;$/, "")}));`
+    // Traces carry the statement's index: two statements can share a line.
+    if (kind === "expect") out = `__devTrace(${k}); ${s.text}${semi} __devPass(${k});`
+    else if (kind === "decl") out = `${s.text}${semi} __devTrace(${k}, ${row.id});`
+    else if (kind === "other") out = `${s.text} ;__devTrace(${k});`
+    else out = `__devTrace(${k}, (${s.text.replace(/;$/, "")}));`
     rewritten += body.slice(at, s.from) + out
     at = s.to
-  }
+  })
   rewritten += body.slice(at)
   const prelude = [
     "const __devF = (v) => v === null ? \"null\" : Array.isArray(v) ? `Array(${v.length})` : typeof v === \"object\" ? `${v.constructor?.name ?? \"Object\"} {…}` : typeof v === \"function\" ? \"[Function]\" : (typeof v === \"string\" ? JSON.stringify(v) : String(v)).slice(0, 60);",
     `const __devW = {${watched.map((w) => `${JSON.stringify(w)}: () => ${w}`).join(", ")}};`,
-    "const __devTrace = (line, ...v) => { const watch = {}; for (const k in __devW) { try { watch[k] = __devF(__devW[k]()) } catch {} } console.log(\"__TRACE \" + JSON.stringify({ line, ...(v.length && v[0] !== undefined ? { returned: __devF(v[0]) } : {}), watch })) };",
-    "const __devPass = (line) => console.log(\"__TRACE \" + JSON.stringify({ line, pass: true }));",
+    "const __devTrace = (row, ...v) => { const watch = {}; for (const k in __devW) { try { watch[k] = __devF(__devW[k]()) } catch {} } console.log(\"__TRACE \" + JSON.stringify({ row, ...(v.length && v[0] !== undefined ? { returned: __devF(v[0]) } : {}), watch })) };",
+    "const __devPass = (row) => console.log(\"__TRACE \" + JSON.stringify({ row, pass: true }));",
   ].join(" ")
   const only = head.replace(/^(\s*)(it|test)(?:\.(?:only|skip))?\(/, "$1it.only(")
   const source = [
@@ -170,7 +195,7 @@ export function instrument(text, name) {
   return { source, rows, watched }
 }
 
-// What the traced run printed: { rows: Map(line → { returned?, watch, pass? }), failed,
+// What the traced run printed: { rows: Map(row index → { returned?, watch, pass? }), failed,
 // error: { type, message } | null }. The error is the first "<Name>Error: …" line after
 // the last trace line, where runners put the failure.
 export function readTrace(output, inst) {
@@ -182,8 +207,9 @@ export function readTrace(output, inst) {
     if (!m) return
     let o
     try { o = JSON.parse(m[1]) } catch { return }
-    const seen = rows.get(o.line) ?? {}
-    rows.set(o.line, o.pass ? { ...seen, pass: true } : { ...seen, ...o })
+    if (!Number.isInteger(o.row)) return
+    const seen = rows.get(o.row) ?? {}
+    rows.set(o.row, o.pass ? { ...seen, pass: true } : { ...seen, ...o })
     after = k + 1
   })
   let error = null
@@ -202,7 +228,7 @@ export function traceNote(trace, file, name) {
   if (!inst || !rows?.size) return null
   const out = []
   for (const r of inst.rows) {
-    const got = rows.get(r.line)
+    const got = rows.get(r.row)
     if (!got) {
       if (failed && r.kind !== "expect") out.push(`${r.line}| ${r.text}   threw: ${error ? `${error.type}: ${error.message}` : "an error"}`)
       break
