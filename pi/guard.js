@@ -542,6 +542,7 @@ export default function devGuard(pi) {
     const text = content.map((c) => c.text ?? "").join("")
     const cwd = ctx?.cwd || process.cwd()
     let hints = []
+    // Both return before reading any file unless the output has their error words.
     if (event?.toolName === "bash") hints = [syntaxHint(text, cwd), tscLines(text, cwd)]
     else if (event?.toolName === "edit" && event.isError) hints = [editMissHint(event.input, text, cwd)]
     hints = hints.filter(Boolean)
