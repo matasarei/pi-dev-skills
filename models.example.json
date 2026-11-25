@@ -16,6 +16,14 @@
           "samplingParams": { "temperature": 0, "reasoning_effort": "none" }
         },
         {
+          "id": "ddalcu/Inkling-2-Mini-MLX-8bit",
+          "name": "Inkling 2 Mini",
+          "input": ["text", "image"],
+          "contextWindow": 131072,
+          "maxTokens": 16384,
+          "samplingParams": { "temperature": 0, "reasoning_effort": "none" }
+        },
+        {
           "id": "qwen/qwen3-coder-30b",
           "name": "Qwen3 Coder 30B",
           "input": ["text", "image"],
