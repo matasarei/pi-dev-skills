@@ -18,7 +18,7 @@ Instead of relying on fragile multi-variable reasoning and prompt guesswork, the
 
 These skills are optimized for ~30B parameter local coding models:
 
-1. **[Inkling 2 Mini](https://huggingface.co/ddalcu/Inkling-2-Mini-MLX-8bit)** (`thinkingmachines/inkling-2-mini`) — Primary recommendation for **32–48 GB+ Apple Silicon**. Multimodal looped-layer MoE (26.4B total, 3.4B active; ~16.8–18.7 GB mixed 8-bit MLX: native NVFP4 experts + 8-bit attention/heads; avoid uniform 4-bit/8-bit). Requires `inkling2_loop` support (`ml-explore/mlx-lm#2086`, `mlx-serve`, `MTPLX`, or GGUF).
+1. **[Inkling 2 Mini](https://lmstudio.ai/models/thinkingmachines/inkling-2-mini)** (`thinkingmachines/inkling-2-mini`) — Primary recommendation (32–48 GB+ RAM/VRAM, Apple Silicon MLX or GGUF on any hardware). Multimodal looped-layer MoE (26.4B total, 3.4B active; ~16.8–18.7 GB in native mixed NVFP4/MXFP8 or MLX mixed 8-bit; avoid uniform 4-bit/8-bit). Requires `inkling2_loop` support (LM Studio, Ollama, `llama.cpp`, or `mlx-lm#2086`/`mlx-serve`/`MTPLX`).
 2. **[Prism Bonsai 27B](https://lmstudio.ai/models/prism-ml/bonsai-27b)** (`prism-ml/bonsai-27b`) — Compact fallback for lower-RAM Apple Silicon (16–24 GB+ RAM; 32–48 GB for 128k context). Good general coding and instruction-following, though less accurate than Inkling 2 Mini in multi-step agent loops.
 3. **[Qwen3 Coder 30B](https://lmstudio.ai/models/qwen/qwen3-coder-30b)** (`qwen/qwen3-coder-30b`) — Tuned specifically for code generation, diff analysis, and fast tool calling. More capable, but requires more memory.
 4. **[Qwen3.8 27B](https://huggingface.co/Qwen/Qwen3.8-27B)** (`Qwen/Qwen3.8-27B`) — Often recommended for local agents as well, worth trying.
