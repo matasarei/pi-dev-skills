@@ -1,0 +1,16 @@
+src/__tests__/cityManager.test.ts(57,15): error TS6133: 'startFunds' is declared but its value is never read.
+src/__tests__/cityManager.test.ts(75,19): error TS2322: Type '"Crater"' is not assignable to type 'TerrainType'.
+src/__tests__/cityManager.test.ts(88,15): error TS6133: 'startFunds' is declared but its value is never read.
+src/__tests__/cityManager.test.ts(103,15): error TS6133: 'startFunds' is declared but its value is never read.
+src/__tests__/cityManager.test.ts(118,15): error TS6133: 'startFunds' is declared but its value is never read.
+src/__tests__/cityManager.test.ts(133,15): error TS6133: 'startFunds' is declared but its value is never read.
+src/__tests__/cityManager.test.ts(145,15): error TS6133: 'startFunds' is declared but its value is never read.
+src/__tests__/cityManager.test.ts(163,15): error TS6133: 'startFunds' is declared but its value is never read.
+npm notice
+npm notice New major version of npm available! 11.16.0 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice
+
+
+Command exited with code 2
