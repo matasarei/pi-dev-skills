@@ -8,7 +8,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-3DA639?style=for-the-badge" alt="License: MIT" /></a>
 </p>
 
-Development skills for [Pi Coding Agent](https://pi.dev) engineered specifically for **local ~30B models** (such as **Qwen3 Coder 30B**, **Prism Bonsai 27B**, and **Qwen3.8 27B**).
+Development skills for [Pi Coding Agent](https://pi.dev) engineered specifically for **local ~30B models** (such as **Inkling 2 Mini**, **Prism Bonsai 27B**, and **Qwen3 Coder 30B**).
 
 Instead of relying on fragile multi-variable reasoning and prompt guesswork, these skills compute facts before prompts run, replace subjective scoring with binary yes/no checks, verify code quotes mechanically, and advance work one discrete step at a time.
 
@@ -18,11 +18,10 @@ Instead of relying on fragile multi-variable reasoning and prompt guesswork, the
 
 These skills are optimized for ~30B parameter local coding models:
 
-1. **[Prism Bonsai 27B](https://lmstudio.ai/models/prism-ml/bonsai-27b)** (`prism-ml/bonsai-27b`) — Strong general coding, reasoning, and instruction-following. Best on Apple Silicon in MLX variant (16–24 GB+ RAM; 32–48 GB recommended for 128k context).
-2. **[Inkling 2 Mini](https://huggingface.co/ddalcu/Inkling-2-Mini-MLX-8bit)** (`ddalcu/Inkling-2-Mini-MLX-8bit`) — Multimodal looped-layer MoE (26.4B total, 3.4B active) for **32–48 GB+ Apple Silicon**. Use mixed 8-bit MLX (~18.7 GB: native NVFP4 experts + 8-bit attention/heads) over uniform 4-bit (~14.8–17.6 GB) or uniform 8-bit (~23–30 GB); requires `inkling2_loop` support (`ml-explore/mlx-lm#2086`, `mlx-serve`, `MTPLX`, or GGUF).
+1. **[Inkling 2 Mini](https://lmstudio.ai/models/thinkingmachines/inkling-2-mini)** (`thinkingmachines/inkling-2-mini`) — Primary recommendation (32–48 GB+ RAM/VRAM, Apple Silicon MLX or GGUF on any hardware). Multimodal looped-layer MoE (26.4B total, 3.4B active; ~16.8–18.7 GB in native mixed NVFP4/MXFP8 or MLX mixed 8-bit; avoid uniform 4-bit/8-bit). Requires `inkling2_loop` support (LM Studio, Ollama, `llama.cpp`, or `mlx-lm#2086`/`mlx-serve`/`MTPLX`).
+2. **[Prism Bonsai 27B](https://lmstudio.ai/models/prism-ml/bonsai-27b)** (`prism-ml/bonsai-27b`) — Compact fallback for lower-RAM Apple Silicon (16–24 GB+ RAM; 32–48 GB for 128k context). Good general coding and instruction-following, though less accurate than Inkling 2 Mini in multi-step agent loops.
 3. **[Qwen3 Coder 30B](https://lmstudio.ai/models/qwen/qwen3-coder-30b)** (`qwen/qwen3-coder-30b`) — Tuned specifically for code generation, diff analysis, and fast tool calling. More capable, but requires more memory.
-4. **[Qwen3.8 27B](https://huggingface.co/Qwen/Qwen3.8-27B)** (`Qwen/Qwen3.8-27B`) — Often recommended for local agents as well, worth trying.
-5. **[Qwen3.5 9B](https://huggingface.co/Qwen/Qwen3.5-9B)** (`Qwen/Qwen3.5-9B`) — For lower-end hardware (8–12 GB VRAM) at 32k. One skill per session, not the whole cycle — see [What each window buys](#what-each-window-buys).
+4. **[Qwen3.5 9B](https://huggingface.co/Qwen/Qwen3.5-9B)** (`Qwen/Qwen3.5-9B`) — For lower-end hardware (8–12 GB VRAM) at 32k. One skill per session, not the whole cycle — see [What each window buys](#what-each-window-buys).
 
 > **Crucial Server Requirement**: Set your model server's context window (LM Studio, Ollama, or llama.cpp) to **64k or 128k**. Local tool calling degrades or loops if it is left at the default 4k/8k. What each of those windows actually buys you — and what 32k does not — is measured in [What each window buys](#what-each-window-buys).
 
@@ -57,7 +56,7 @@ pi install ./pi-dev-skills        # loaded from the checkout, not copied
 A complete provider for LM Studio is in [**`models.example.json`**](models.example.json). Copy it to `~/.pi/agent/models.json` (or merge its `lmstudio` provider into yours), then start Pi on one of its models:
 
 ```bash
-pi --model lmstudio/prism-ml/bonsai-27b
+pi --model lmstudio/thinkingmachines/inkling-2-mini
 ```
 
 ```json
