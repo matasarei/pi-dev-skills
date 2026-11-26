@@ -8,19 +8,19 @@
       "apiKey": "lmstudio",
       "models": [
         {
-          "id": "prism-ml/bonsai-27b",
-          "name": "Prism Bonsai 27B",
-          "input": ["text", "image"],
-          "contextWindow": 131072,
-          "maxTokens": 12288,
-          "samplingParams": { "temperature": 0, "reasoning_effort": "none" }
-        },
-        {
           "id": "thinkingmachines/inkling-2-mini",
           "name": "Inkling 2 Mini",
           "input": ["text", "image"],
           "contextWindow": 131072,
           "maxTokens": 16384,
+          "samplingParams": { "temperature": 0, "reasoning_effort": "none" }
+        },
+        {
+          "id": "prism-ml/bonsai-27b",
+          "name": "Prism Bonsai 27B",
+          "input": ["text", "image"],
+          "contextWindow": 131072,
+          "maxTokens": 12288,
           "samplingParams": { "temperature": 0, "reasoning_effort": "none" }
         },
         {
