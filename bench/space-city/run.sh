@@ -23,7 +23,7 @@ set -u
 SPACE_CITY_URL="https://github.com/matasarei/space-city.git"
 SPACE_CITY_SHA="ec643a375175d7d734e262309072a3ff0adbd650"
 PI_VERSION="1.5.0"
-LMS_MODEL="prism-ml/bonsai-27b"
+LMS_MODEL="${BENCH_LMS_MODEL:-prism-ml/bonsai-27b}"
 MODEL="lmstudio/$LMS_MODEL"
 CONTEXT=131072
 IMAGE="node:lts-alpine"

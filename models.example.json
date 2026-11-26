@@ -16,7 +16,7 @@
           "samplingParams": { "temperature": 0, "reasoning_effort": "none" }
         },
         {
-          "id": "ddalcu/Inkling-2-Mini-MLX-8bit",
+          "id": "thinkingmachines/inkling-2-mini",
           "name": "Inkling 2 Mini",
           "input": ["text", "image"],
           "contextWindow": 131072,
